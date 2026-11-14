@@ -28,3 +28,8 @@ project.inlang/cache/
 *.db
 *.db-*
 /data
+
+# Playwright
+/e2e/.tmp
+/test-results
+/playwright-report

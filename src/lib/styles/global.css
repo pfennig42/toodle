@@ -351,6 +351,7 @@ textarea:focus-visible {
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .list li > .row {
@@ -371,4 +372,15 @@ textarea:focus-visible {
 
 .danger-zone {
 	border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.grid-2 {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+	gap: var(--space-3);
+}
+
+textarea {
+	resize: vertical;
+	line-height: 1.5;
 }

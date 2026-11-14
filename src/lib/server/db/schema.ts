@@ -1,4 +1,5 @@
 import { CONTACT_KINDS } from '../../contacts.js';
+import { FIELD_TYPES, type FieldConfig } from '../../forms.js';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 const id = () =>
@@ -89,3 +90,91 @@ export const place = sqliteTable(
 export type User = typeof user.$inferSelect;
 export type Contact = typeof contact.$inferSelect;
 export type Place = typeof place.$inferSelect;
+
+export const EVENT_STATUSES = ['draft', 'published', 'archived'] as const;
+export type EventStatus = (typeof EVENT_STATUSES)[number];
+
+export const event = sqliteTable(
+	'event',
+	{
+		id: id(),
+		/** Public, unguessable code used in /e/<slug> */
+		slug: text('slug').notNull(),
+		title: text('title').notNull(),
+		description: text('description').notNull().default(''),
+		/** Name of the venue, e.g. "Jugendhof Waldheim" */
+		locationName: text('location_name').notNull().default(''),
+		locationAddress: text('location_address'),
+		locationArea: text('location_area'),
+		lat: real('lat'),
+		lon: real('lon'),
+		startsAt: integer('starts_at', { mode: 'timestamp' }).notNull(),
+		endsAt: integer('ends_at', { mode: 'timestamp' }).notNull(),
+		timezone: text('timezone').notNull().default('Europe/Berlin'),
+		registrationDeadline: integer('registration_deadline', { mode: 'timestamp' }),
+		/** Manually closed by the organizers, independent of the deadline */
+		registrationClosed: integer('registration_closed', { mode: 'boolean' })
+			.notNull()
+			.default(false),
+		capacity: integer('capacity'),
+		status: text('status', { enum: EVENT_STATUSES }).notNull().default('draft'),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(t) => [uniqueIndex('event_slug_idx').on(t.slug)]
+);
+
+export const eventOrganizer = sqliteTable(
+	'event_organizer',
+	{
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		createdAt: createdAt()
+	},
+	(t) => [
+		uniqueIndex('event_organizer_pk').on(t.eventId, t.userId),
+		index('event_organizer_user_idx').on(t.userId)
+	]
+);
+
+/** Single-use link to join the organizer team; id = SHA-256 of the token. */
+export const organizerInvite = sqliteTable(
+	'organizer_invite',
+	{
+		id: text('id').primaryKey(),
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id, { onDelete: 'cascade' }),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [index('organizer_invite_event_idx').on(t.eventId)]
+);
+
+export const formField = sqliteTable(
+	'form_field',
+	{
+		id: id(),
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id, { onDelete: 'cascade' }),
+		position: integer('position').notNull(),
+		type: text('type', { enum: FIELD_TYPES }).notNull(),
+		label: text('label').notNull(),
+		help: text('help').notNull().default(''),
+		required: integer('required', { mode: 'boolean' }).notNull().default(false),
+		config: text('config', { mode: 'json' }).$type<FieldConfig>().notNull().default({})
+	},
+	(t) => [index('form_field_event_idx').on(t.eventId, t.position)]
+);
+
+export type Event = typeof event.$inferSelect;
+export type FormField = typeof formField.$inferSelect;

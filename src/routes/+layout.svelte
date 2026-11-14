@@ -2,6 +2,7 @@
 	import '#lib/styles/global.css';
 	import { asset, resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import { onMount } from 'svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import Icon from '#lib/components/Icon.svelte';
 	import LocaleSwitch from '#lib/components/LocaleSwitch.svelte';
@@ -9,6 +10,11 @@
 	import type { LayoutProps } from './$types';
 
 	let { children, data }: LayoutProps = $props();
+
+	// Marker for end-to-end tests (and CSS, if ever needed): the app is interactive now.
+	onMount(() => {
+		document.documentElement.dataset.hydrated = '';
+	});
 
 	const isActive = (path: string) =>
 		path === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(path);

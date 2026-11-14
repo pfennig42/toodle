@@ -15,6 +15,8 @@
 	};
 	let editing = $state<PlaceDraft | null>(null);
 	let contactValue = $state('');
+	// svelte-ignore state_referenced_locally
+	let name = $state(data.profile.name);
 
 	const errorText = {
 		name: m.error_name,
@@ -46,7 +48,7 @@
 		<form method="post" action="?/name" class="stack" use:enhance={keep}>
 			<label class="field">
 				<span>{m.field_name()}</span>
-				<input name="name" required maxlength="80" autocomplete="name" value={data.profile.name} />
+				<input name="name" required maxlength="80" autocomplete="name" bind:value={name} />
 				<span class="muted small">{m.field_name_hint()}</span>
 			</label>
 			<p class="muted small">{m.field_email()}: {data.profile.email}</p>

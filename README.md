@@ -12,13 +12,14 @@ npm install
 npm run dev
 ```
 
-| Befehl                            | Zweck                                                |
-| --------------------------------- | ---------------------------------------------------- |
-| `npm run dev`                     | Dev-Server                                           |
-| `npm run check`                   | Typecheck                                            |
-| `npm run lint` / `npm run format` | Prettier + ESLint                                    |
-| `npm test`                        | Unit-Tests (Vitest)                                  |
-| `npm run db:generate`             | Migration aus `src/lib/server/db/schema.ts` erzeugen |
+| Befehl                            | Zweck                                                                 |
+| --------------------------------- | --------------------------------------------------------------------- |
+| `npm run dev`                     | Dev-Server                                                            |
+| `npm run check`                   | Typecheck                                                             |
+| `npm run lint` / `npm run format` | Prettier + ESLint                                                     |
+| `npm test`                        | Unit-Tests (Vitest)                                                   |
+| `npm run test:e2e`                | End-to-End-Tests (Playwright, Handy 360 px + Desktop, eigene Test-DB) |
+| `npm run db:generate`             | Migration aus `src/lib/server/db/schema.ts` erzeugen                  |
 
 Migrationen in `drizzle/` werden beim Serverstart automatisch angewendet.
 

@@ -5,6 +5,9 @@
 
 	let { data, form }: PageProps = $props();
 	let pending = $state(false);
+	// bind:value keeps input typed before hydration (slow networks)
+	// svelte-ignore state_referenced_locally
+	let email = $state(form && 'email' in form ? form.email : '');
 
 	const errors = {
 		email: m.login_error_email,
@@ -44,13 +47,7 @@
 			<input type="hidden" name="next" value={data.next ?? ''} />
 			<label class="field">
 				<span>{m.field_email()}</span>
-				<input
-					type="email"
-					name="email"
-					autocomplete="username"
-					required
-					value={form && 'email' in form ? form.email : ''}
-				/>
+				<input type="email" name="email" autocomplete="username" required bind:value={email} />
 			</label>
 			<label class="field">
 				<span>{m.field_password()} <span class="muted">({m.optional()})</span></span>

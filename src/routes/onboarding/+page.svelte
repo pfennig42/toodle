@@ -6,6 +6,11 @@
 
 	let { data, form }: PageProps = $props();
 	let placeLabel = $state(m.place_default_home());
+	// bind:value keeps input typed before hydration (slow networks)
+	// svelte-ignore state_referenced_locally
+	let name = $state(form?.name ?? data.name);
+	// svelte-ignore state_referenced_locally
+	let contactValue = $state(form?.contactValue ?? '');
 </script>
 
 <svelte:head><title>{m.onboarding_title()} · {m.app_name()}</title></svelte:head>
@@ -21,13 +26,7 @@
 			<legend>{m.onboarding_name_title()}</legend>
 			<label class="field">
 				<span>{m.field_name()}</span>
-				<input
-					name="name"
-					required
-					maxlength="80"
-					autocomplete="name"
-					value={form?.name ?? data.name}
-				/>
+				<input name="name" required maxlength="80" autocomplete="name" bind:value={name} />
 				<span class="muted small">{m.field_name_hint()}</span>
 			</label>
 			{#if form?.errors?.name}<p class="error">{m.error_name()}</p>{/if}
@@ -38,7 +37,7 @@
 			<p class="muted small">{m.onboarding_contact_hint()}</p>
 			<div class="row">
 				<ContactKindSelect />
-				<input name="value" aria-label={m.contact_value()} value={form?.contactValue ?? ''} />
+				<input name="value" aria-label={m.contact_value()} bind:value={contactValue} />
 			</div>
 			{#if form?.errors?.contact}<p class="error">{m.error_contact()}</p>{/if}
 		</fieldset>

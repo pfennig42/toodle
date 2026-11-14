@@ -9,7 +9,9 @@
 		"vite.config.ts",
 		"prettier.config.js",
 		"eslint.config.js",
-		"drizzle.config.ts"
+		"drizzle.config.ts",
+		"playwright.config.ts",
+		"e2e"
 	],
 	"exclude": ["src/service-worker.ts"]
 }
