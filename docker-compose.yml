@@ -8,6 +8,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: /data/toodle.db
+      # Real client IP from Caddy (used for rate limiting)
+      ADDRESS_HEADER: X-Forwarded-For
+      XFF_DEPTH: '1'
     # Caddy (/srv/edge) runs with network_mode: host → only expose on localhost
     ports:
       - '127.0.0.1:${TOODLE_PORT:-3100}:3000'

@@ -14,6 +14,10 @@ export const variables = defineEnvVars({
 	},
 	SMTP_USER: { description: 'SMTP login.', schema: optional },
 	SMTP_PASS: { description: 'SMTP password / key.', schema: optional },
+	GEOCODER_URL: {
+		description: 'Photon-compatible geocoding API used for the address search.',
+		schema: (value) => value || 'https://photon.komoot.io'
+	},
 	MAIL_FROM: {
 		description: 'Sender address, e.g. "toodle <noreply@toodle.lu>".',
 		schema: optional

@@ -171,7 +171,7 @@ Per E-Mail, später Web-Push (PWA):
 | ---------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | Framework  | SvelteKit (Svelte 5, TypeScript), Node-Adapter                                                                              | Server + UI in einem, wenig Ballast, gute PWA-Unterstützung |
 | Datenbank  | SQLite + Drizzle ORM                                                                                                        | Kein separater DB-Container, triviales Backup               |
-| Auth       | Eigene Implementierung: optionales Passwort (Argon2id) + Magic Link (Token-Hash in DB), Session-Cookie                      | Klein, keine Abhängigkeit                                   |
+| Auth       | Eigene Implementierung: optionales Passwort (scrypt aus `node:crypto`) + Magic Link (Token-Hash in DB), Session-Cookie      | Klein, keine Abhängigkeit                                   |
 | Mail       | SMTP via Nodemailer; Betrieb über Brevo (smtp-relay.brevo.com)                                                              | Anbieter bleibt austauschbar                                |
 | i18n       | Paraglide JS                                                                                                                | Typsicher, gut mit SvelteKit                                |
 | Styling    | Eigenes CSS mit Custom Properties (Light/Dark-Tokens)                                                                       | Neutral, keine Framework-Optik                              |

@@ -22,7 +22,9 @@ npm run dev
 
 Migrationen in `drizzle/` werden beim Serverstart automatisch angewendet.
 
-Texte liegen in `messages/de.json` und `messages/en.json`.
+Texte liegen in `messages/de.json` und `messages/en.json` (`npm run i18n` erzeugt daraus `src/lib/paraglide`).
+
+Ohne `SMTP_HOST` werden Mails (z. B. Login-Links) in der Server-Konsole ausgegeben.
 
 ## Betrieb (Docker + Caddy)
 

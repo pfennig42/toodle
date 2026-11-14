@@ -1,16 +1,17 @@
-/* Design tokens – neutral, calm, one accent. Light is the default palette. */
+/* Design tokens – forest green, cream, coral (from the calendar-bus logo). Light is the default palette. */
 :root {
 	color-scheme: light;
-	--bg: #f7f7f5;
-	--surface: #ffffff;
-	--surface-2: #efefec;
-	--border: #dcdcd7;
-	--text: #1d1e20;
-	--text-muted: #5f6166;
-	--accent: #1f6f5c;
+	--bg: #f7f5f0;
+	--surface: #fffdf9;
+	--surface-2: #efece5;
+	--border: #ddd8ce;
+	--text: #1e2a24;
+	--text-muted: #5d635f;
+	--accent: #2f6b4f;
 	--accent-text: #ffffff;
-	--accent-soft: #dcefe8;
+	--accent-soft: #dcebe1;
 	--danger: #b3261e;
+	--coral: #e0644a;
 
 	--radius: 0.6rem;
 	--space-1: 0.25rem;
@@ -20,6 +21,8 @@
 	--space-6: 1.5rem;
 	--space-8: 2rem;
 	--content-width: 44rem;
+	--touch: 2.75rem; /* 44px minimum touch target */
+	--bottom-nav-height: 3.5rem;
 
 	--font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
 }
@@ -27,31 +30,33 @@
 @media (prefers-color-scheme: dark) {
 	:root[data-theme='system'] {
 		color-scheme: dark;
-		--bg: #18191b;
-		--surface: #212225;
-		--surface-2: #2a2b2f;
-		--border: #3a3b40;
-		--text: #ececea;
-		--text-muted: #a3a5aa;
-		--accent: #6cc6aa;
-		--accent-text: #0f1a16;
-		--accent-soft: #23372f;
+		--bg: #171a18;
+		--surface: #202421;
+		--surface-2: #2a2f2b;
+		--border: #3a403b;
+		--text: #ecebe6;
+		--text-muted: #a5aaa6;
+		--accent: #7fc29b;
+		--accent-text: #10241a;
+		--accent-soft: #23372b;
 		--danger: #f2948c;
+		--coral: #f08a73;
 	}
 }
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--bg: #18191b;
-	--surface: #212225;
-	--surface-2: #2a2b2f;
-	--border: #3a3b40;
-	--text: #ececea;
-	--text-muted: #a3a5aa;
-	--accent: #6cc6aa;
-	--accent-text: #0f1a16;
-	--accent-soft: #23372f;
+	--bg: #171a18;
+	--surface: #202421;
+	--surface-2: #2a2f2b;
+	--border: #3a403b;
+	--text: #ecebe6;
+	--text-muted: #a5aaa6;
+	--accent: #7fc29b;
+	--accent-text: #10241a;
+	--accent-soft: #23372b;
 	--danger: #f2948c;
+	--coral: #f08a73;
 }
 
 *,
@@ -109,7 +114,9 @@ textarea {
 .btn {
 	display: inline-flex;
 	align-items: center;
+	justify-content: center;
 	gap: var(--space-2);
+	min-height: var(--touch);
 	padding: var(--space-2) var(--space-4);
 	border: 1px solid var(--border);
 	border-radius: var(--radius);
@@ -152,4 +159,216 @@ textarea {
 	overflow: hidden;
 	clip-path: inset(50%);
 	white-space: nowrap;
+}
+
+/* ---- Layout helpers ---- */
+.narrow {
+	max-width: 28rem;
+	margin-inline: auto;
+}
+
+.stack {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.stack-lg {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-6);
+}
+
+.row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	align-items: center;
+}
+
+.row > input {
+	flex: 1 1 12rem;
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+.spaced {
+	margin-top: var(--space-3);
+}
+
+.small {
+	font-size: 0.875rem;
+}
+
+p.small,
+p.error {
+	margin: 0;
+}
+
+.error {
+	color: var(--danger);
+}
+
+h2 {
+	font-size: 1.15rem;
+}
+
+/* ---- Forms ---- */
+fieldset {
+	border: 0;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+legend {
+	font-weight: 600;
+	padding: 0;
+	margin-bottom: var(--space-2);
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+}
+
+.field > span:first-child,
+.field > label {
+	font-weight: 500;
+}
+
+input:not([type='checkbox'], [type='radio'], [type='hidden']),
+select,
+textarea {
+	width: 100%;
+	padding: var(--space-2) var(--space-3);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	min-height: var(--touch);
+}
+
+/* Keep focused fields clear of the sticky header / on-screen keyboard. */
+input,
+select,
+textarea {
+	scroll-margin-block: 5rem;
+}
+
+.row > select {
+	width: auto;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 0;
+	border-color: var(--accent);
+}
+
+.btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.btn.small {
+	min-height: 2.25rem;
+	padding: var(--space-1) var(--space-3);
+	font-size: 0.875rem;
+}
+
+/* Fingers need bigger targets than mouse pointers. */
+@media (pointer: coarse) {
+	.btn.small {
+		min-height: var(--touch);
+	}
+}
+
+/* Segmented control (language, theme, later: travel mode …) */
+.segmented {
+	display: flex;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	overflow: hidden;
+}
+
+.segmented button {
+	flex: 1;
+	min-height: var(--touch);
+	padding: var(--space-1) var(--space-3);
+	border: 0;
+	background: var(--surface);
+	cursor: pointer;
+	font-size: 0.9rem;
+}
+
+.segmented button + button {
+	border-left: 1px solid var(--border);
+}
+
+.segmented button[aria-pressed='true'] {
+	background: var(--accent-soft);
+	font-weight: 600;
+}
+
+.btn-danger {
+	background: var(--danger);
+	border-color: var(--danger);
+	color: var(--surface);
+}
+
+.btn-danger:hover {
+	background: var(--danger);
+	filter: brightness(1.08);
+}
+
+/* ---- Lists & cards ---- */
+.list {
+	list-style: none;
+	margin: 0 0 var(--space-4);
+	padding: 0;
+}
+
+.list li {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: var(--space-3);
+	padding-block: var(--space-3);
+	border-bottom: 1px solid var(--border);
+}
+
+.list li > span:first-child {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.list li > .row {
+	flex-wrap: nowrap;
+	flex-shrink: 0;
+}
+
+.card h2 + p.small {
+	margin-bottom: var(--space-4);
+}
+
+.subcard {
+	padding: var(--space-4);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--bg);
+}
+
+.danger-zone {
+	border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
 }
