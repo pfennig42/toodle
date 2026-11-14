@@ -1,0 +1,22 @@
+name: toodle
+
+services:
+  toodle:
+    build: .
+    image: toodle:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: /data/toodle.db
+    # Caddy (/srv/edge) runs with network_mode: host → only expose on localhost
+    ports:
+      - '127.0.0.1:${TOODLE_PORT:-3100}:3000'
+    volumes:
+      - data:/data
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: '3' }
+
+volumes:
+  data:

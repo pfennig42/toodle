@@ -1,0 +1,13 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"app_name": "toodle",
+	"app_tagline": "Anmelden – und sehen, wer mitfährt.",
+	"home_intro": "toodle verbindet die Anmeldung zu einer Veranstaltung mit der Frage, wie du hinkommst. Du siehst, wer aus deiner Nähe fährt oder eine Mitfahrt sucht – den Rest klärt ihr direkt miteinander.",
+	"home_coming_soon": "Hier entsteht gerade etwas. Anmeldung und Veranstaltungen folgen bald.",
+	"nav_language": "Sprache",
+	"theme_label": "Farbschema",
+	"theme_system": "System",
+	"theme_light": "Hell",
+	"theme_dark": "Dunkel",
+	"footer_note": "toodle – selbst gehostet, ohne Tracking."
+}

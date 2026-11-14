@@ -1,0 +1,155 @@
+/* Design tokens – neutral, calm, one accent. Light is the default palette. */
+:root {
+	color-scheme: light;
+	--bg: #f7f7f5;
+	--surface: #ffffff;
+	--surface-2: #efefec;
+	--border: #dcdcd7;
+	--text: #1d1e20;
+	--text-muted: #5f6166;
+	--accent: #1f6f5c;
+	--accent-text: #ffffff;
+	--accent-soft: #dcefe8;
+	--danger: #b3261e;
+
+	--radius: 0.6rem;
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-6: 1.5rem;
+	--space-8: 2rem;
+	--content-width: 44rem;
+
+	--font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Ubuntu, Cantarell, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root[data-theme='system'] {
+		color-scheme: dark;
+		--bg: #18191b;
+		--surface: #212225;
+		--surface-2: #2a2b2f;
+		--border: #3a3b40;
+		--text: #ececea;
+		--text-muted: #a3a5aa;
+		--accent: #6cc6aa;
+		--accent-text: #0f1a16;
+		--accent-soft: #23372f;
+		--danger: #f2948c;
+	}
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+	--bg: #18191b;
+	--surface: #212225;
+	--surface-2: #2a2b2f;
+	--border: #3a3b40;
+	--text: #ececea;
+	--text-muted: #a3a5aa;
+	--accent: #6cc6aa;
+	--accent-text: #0f1a16;
+	--accent-soft: #23372f;
+	--danger: #f2948c;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+}
+
+body {
+	margin: 0;
+	min-height: 100dvh;
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font);
+	font-size: 1rem;
+	line-height: 1.55;
+}
+
+h1,
+h2,
+h3 {
+	line-height: 1.2;
+	margin: 0 0 var(--space-3);
+}
+
+h1 {
+	font-size: 1.75rem;
+}
+
+p {
+	margin: 0 0 var(--space-4);
+}
+
+a {
+	color: var(--accent);
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: var(--space-2) var(--space-4);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	cursor: pointer;
+	text-decoration: none;
+	color: var(--text);
+}
+
+.btn:hover {
+	background: var(--surface-2);
+}
+
+.btn-primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: var(--accent-text);
+}
+
+.btn-primary:hover {
+	background: var(--accent);
+	filter: brightness(1.08);
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: var(--space-6);
+}
+
+.muted {
+	color: var(--text-muted);
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}

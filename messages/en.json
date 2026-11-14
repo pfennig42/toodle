@@ -1,0 +1,13 @@
+{
+	"$schema": "https://inlang.com/schema/inlang-message-format",
+	"app_name": "toodle",
+	"app_tagline": "Sign up – and see who's driving.",
+	"home_intro": "toodle combines signing up for an event with the question of how you get there. You see who nearby is driving or looking for a ride – the rest you sort out directly with each other.",
+	"home_coming_soon": "Work in progress. Sign-up and events are coming soon.",
+	"nav_language": "Language",
+	"theme_label": "Colour scheme",
+	"theme_system": "System",
+	"theme_light": "Light",
+	"theme_dark": "Dark",
+	"footer_note": "toodle – self-hosted, no tracking."
+}

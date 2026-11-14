@@ -1,0 +1,10 @@
+# Add to /srv/edge/Caddyfile (Caddy runs with network_mode: host).
+# Port must match TOODLE_PORT in toodle's .env (default 3100).
+toodle.lu {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3100
+}
+
+www.toodle.lu {
+	redir https://toodle.lu{uri} permanent
+}
