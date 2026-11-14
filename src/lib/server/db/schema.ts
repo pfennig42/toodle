@@ -1,5 +1,6 @@
 import { CONTACT_KINDS } from '../../contacts.js';
-import { FIELD_TYPES, type FieldConfig } from '../../forms.js';
+import { FIELD_TYPES, TRAVEL_DIRECTIONS, type FieldConfig } from '../../forms.js';
+import { CAR_STATUSES, TRAVEL_MODES, type AnswerValue } from '../../registration.js';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 const id = () =>
@@ -178,3 +179,92 @@ export const formField = sqliteTable(
 
 export type Event = typeof event.$inferSelect;
 export type FormField = typeof formField.$inferSelect;
+
+export const REGISTRATION_STATUSES = ['active', 'withdrawn'] as const;
+
+export const registration = sqliteTable(
+	'registration',
+	{
+		id: id(),
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id, { onDelete: 'cascade' }),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		status: text('status', { enum: REGISTRATION_STATUSES }).notNull().default('active'),
+		comment: text('comment').notNull().default(''),
+		createdAt: createdAt(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(t) => [
+		uniqueIndex('registration_event_user_idx').on(t.eventId, t.userId),
+		index('registration_user_idx').on(t.userId)
+	]
+);
+
+export const answer = sqliteTable(
+	'answer',
+	{
+		registrationId: text('registration_id')
+			.notNull()
+			.references(() => registration.id, { onDelete: 'cascade' }),
+		fieldId: text('field_id')
+			.notNull()
+			.references(() => formField.id, { onDelete: 'cascade' }),
+		value: text('value', { mode: 'json' }).$type<AnswerValue>().notNull()
+	},
+	(t) => [uniqueIndex('answer_pk').on(t.registrationId, t.fieldId)]
+);
+
+/**
+ * One direction of a participant's journey. Place data is a snapshot (copied from the
+ * profile), so later profile changes don't alter past registrations.
+ */
+export const travelLeg = sqliteTable(
+	'travel_leg',
+	{
+		id: id(),
+		registrationId: text('registration_id')
+			.notNull()
+			.references(() => registration.id, { onDelete: 'cascade' }),
+		direction: text('direction', { enum: TRAVEL_DIRECTIONS }).notNull(),
+		time: integer('time', { mode: 'timestamp' }),
+		mode: text('mode', { enum: TRAVEL_MODES }).notNull(),
+		placeLabel: text('place_label'),
+		placeAddress: text('place_address'),
+		placeArea: text('place_area'),
+		lat: real('lat'),
+		lon: real('lon'),
+		carStatus: text('car_status', { enum: CAR_STATUSES }),
+		carNote: text('car_note').notNull().default('')
+	},
+	(t) => [uniqueIndex('travel_leg_direction_idx').on(t.registrationId, t.direction)]
+);
+
+/**
+ * Alternative pick-up (arrival) or drop-off (departure) points for public transport users:
+ * "I can be at station A at 16:40 or at station B at 17:10".
+ */
+export const pickupOption = sqliteTable(
+	'pickup_option',
+	{
+		id: id(),
+		legId: text('leg_id')
+			.notNull()
+			.references(() => travelLeg.id, { onDelete: 'cascade' }),
+		position: integer('position').notNull(),
+		label: text('label').notNull(),
+		area: text('area').notNull(),
+		lat: real('lat').notNull(),
+		lon: real('lon').notNull(),
+		time: integer('time', { mode: 'timestamp' })
+	},
+	(t) => [index('pickup_option_leg_idx').on(t.legId, t.position)]
+);
+
+export type Registration = typeof registration.$inferSelect;
+export type TravelLeg = typeof travelLeg.$inferSelect;
+export type PickupOption = typeof pickupOption.$inferSelect;

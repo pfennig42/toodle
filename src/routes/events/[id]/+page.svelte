@@ -61,6 +61,11 @@
 					: m.event_no_deadline()}
 				{#if o.capacity}· {m.event_capacity_value({ count: o.capacity })}{/if}
 			</p>
+			<p class="count">
+				{m.event_registration_count({ count: o.registrations })}{o.capacity
+					? ` / ${o.capacity}`
+					: ''}
+			</p>
 		</div>
 		<a class="btn small align-start" href={resolve('/events/[id]/details', { id: ev.id })}
 			>{m.edit()}</a
@@ -182,6 +187,11 @@
 
 	h2 {
 		margin: 0;
+	}
+
+	.count {
+		margin-top: var(--space-1) !important;
+		font-weight: 600;
 	}
 
 	.align-start {

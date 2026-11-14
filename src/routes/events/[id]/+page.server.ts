@@ -10,6 +10,7 @@ import {
 	setEventStatus,
 	setRegistrationClosed
 } from '#lib/server/events.js';
+import { countActiveRegistrations } from '#lib/server/registrations.js';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
@@ -31,6 +32,7 @@ export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
 			locationName: e.locationName,
 			locationAddress: e.locationAddress,
 			fieldCount: listFields(e.id).length,
+			registrations: countActiveRegistrations(e.id),
 			blockers: publishBlockers(e)
 		},
 		qr,

@@ -16,3 +16,10 @@ export function addressFromProperties(p: Record<string, string | undefined>): st
 	const head = p.name && p.name !== p.street ? p.name : undefined;
 	return [head, street, town, p.country].filter(Boolean).join(', ');
 }
+
+/** Short label: the POI name, otherwise street + number, otherwise the town. */
+export function nameFromProperties(p: Record<string, string | undefined>): string {
+	if (p.name) return p.name;
+	const street = [p.street, p.housenumber].filter(Boolean).join(' ');
+	return street || p.city || p.town || p.village || '';
+}

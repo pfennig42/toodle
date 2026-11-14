@@ -90,7 +90,10 @@ Zusätzlich je nach Modus:
     Fahrende ohne Mitnahme bleiben trotzdem sichtbar (ausgegraut): Information für die Orga und für Absprachen
     („fährst du doch direkt?“).
 - **🚆 ÖV → „letzte Meile“** (optional): _„Ich komme bis Bhf. X um ca. 16:40 und würde mich über eine Abholung
-  freuen.“_ Der Abholpunkt wird damit zum Suchpunkt für Fahrende, deren Strecke dort vorbeiführt.
+  freuen.“_ Es können **mehrere Alternativen** angegeben werden (max. 5): _„… in Waldheim um 16:40 oder in Talhausen
+  um 17:10 – je nachdem, wer mich einsammeln kann.“_ Bei der Abreise entsprechend als Absetzpunkte („Bringt mich
+  jemand zu Bhf. X oder Y?“). Jeder Abholpunkt ist ein Suchpunkt; in der Mitfahr-Ansicht zählt pro fahrender Person
+  die Alternative mit dem kleinsten Umweg. Die Bahnhofssuche bevorzugt Treffer nahe der Veranstaltung.
 - **🙋 suche Mitfahrt**: Suchpunkt ist der Start- bzw. Zielort.
 
 Die Zeitangabe für das Event als Ganzes (wann bin ich vor Ort) ergibt sich aus Hin-/Rückfahrt und speist die
@@ -200,7 +203,7 @@ travel_leg      id, registration_id, direction (to|from),
                 time, time_flexible ("nach Ende"), place_lat, place_lon, place_label,
                 mode (car|transit|seeking|undecided),
                 car_status (offering|full|not_offering), car_note,
-                pickup_lat, pickup_lon, pickup_label, pickup_time   -- letzte Meile
+pickup_option   id, leg_id, position, label, area, lat, lon, time   -- Alternativen für die letzte Meile
 ride_link       id, event_id, direction, driver_leg_id, passenger_leg_id, set_by_user_id, created_at
 ```
 

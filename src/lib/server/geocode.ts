@@ -1,7 +1,14 @@
 import { GEOCODER_URL } from '$app/env/private';
-import { addressFromProperties, areaFromProperties } from './geocode-format.js';
+import { addressFromProperties, areaFromProperties, nameFromProperties } from './geocode-format.js';
 
-export type GeocodeResult = { address: string; area: string; lat: number; lon: number };
+export type GeocodeResult = {
+	/** Short name, e.g. "Waldheim Bahnhof" or "Venloer Straße 12" */
+	name: string;
+	address: string;
+	area: string;
+	lat: number;
+	lon: number;
+};
 
 type PhotonFeature = {
 	geometry: { coordinates: [number, number] };
@@ -9,11 +16,20 @@ type PhotonFeature = {
 };
 
 /** Forward geocoding via a Photon-compatible API (https://photon.komoot.io by default). */
-export async function geocode(query: string, lang: string): Promise<GeocodeResult[]> {
+export async function geocode(
+	query: string,
+	lang: string,
+	near?: { lat: number; lon: number }
+): Promise<GeocodeResult[]> {
 	const url = new URL('/api', GEOCODER_URL);
 	url.searchParams.set('q', query);
 	url.searchParams.set('limit', '6');
 	if (['de', 'en', 'fr'].includes(lang)) url.searchParams.set('lang', lang);
+	if (near) {
+		// Prefer results close to the event (e.g. the nearest train stations)
+		url.searchParams.set('lat', String(near.lat));
+		url.searchParams.set('lon', String(near.lon));
+	}
 
 	const res = await fetch(url, {
 		headers: { 'user-agent': 'toodle (self-hosted event & ride sharing app)' },
@@ -25,6 +41,7 @@ export async function geocode(query: string, lang: string): Promise<GeocodeResul
 	const seen = new Set<string>();
 	return (data.features ?? [])
 		.map((f) => ({
+			name: nameFromProperties(f.properties),
 			address: addressFromProperties(f.properties),
 			area: areaFromProperties(f.properties),
 			lon: f.geometry.coordinates[0],

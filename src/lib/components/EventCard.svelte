@@ -6,8 +6,11 @@
 	import StateBadge from './StateBadge.svelte';
 
 	let {
-		event
+		event,
+		href
 	}: {
+		/** Defaults to the management page */
+		href?: string;
 		event: {
 			id: string;
 			title: string;
@@ -23,10 +26,11 @@
 	const where = $derived([event.locationName, event.locationArea].filter(Boolean).join(', '));
 </script>
 
-<a class="event-card" href={resolve('/events/[id]', { id: event.id })}>
+<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- href is resolved by the caller -->
+<a class="event-card" href={href ?? resolve('/events/[id]', { id: event.id })}>
 	<span class="top">
 		<strong>{event.title}</strong>
-		<StateBadge state={event.state} />
+		{#if !href}<StateBadge state={event.state} />{/if}
 	</span>
 	<span class="muted small"
 		>{formatRange(event.startsAt, event.endsAt, event.timezone, getLocale())}</span

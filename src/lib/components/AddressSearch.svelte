@@ -1,12 +1,28 @@
 <script lang="ts">
 	import { m } from '#lib/paraglide/messages.js';
 
-	type Result = { address: string; area: string; lat: number; lon: number };
+	type Result = { name?: string; address: string; area: string; lat: number; lon: number };
 
 	let {
 		value = $bindable<Result | null>(null),
-		id = 'address'
-	}: { value?: Result | null; id?: string } = $props();
+		id = 'address',
+		near = null,
+		placeholder = m.place_search_placeholder(),
+		hiddenInputs = true,
+		showArea = true,
+		compact = false
+	}: {
+		value?: Result | null;
+		id?: string;
+		/** Prefer results close to this point (e.g. stations near the event). */
+		near?: { lat: number; lon: number } | null;
+		placeholder?: string;
+		/** Render address/area/lat/lon as hidden form inputs (plain form posts). */
+		hiddenInputs?: boolean;
+		showArea?: boolean;
+		/** Show only the short name of the chosen place (e.g. "Waldheim Bahnhof"). */
+		compact?: boolean;
+	} = $props();
 
 	let query = $state('');
 	let results = $state<Result[]>([]);
@@ -27,7 +43,8 @@
 			controller = new AbortController();
 			status = 'loading';
 			try {
-				const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`, {
+				const bias = near ? `&lat=${near.lat}&lon=${near.lon}` : '';
+				const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}${bias}`, {
 					signal: controller.signal
 				});
 				if (!res.ok) throw new Error(String(res.status));
@@ -56,15 +73,17 @@
 {#if value}
 	<div class="chosen">
 		<div>
-			<div>{value.address}</div>
-			<div class="muted small">{m.place_area_hint({ area: value.area })}</div>
+			<div>{compact && value.name ? value.name : value.address}</div>
+			{#if showArea}<div class="muted small">{m.place_area_hint({ area: value.area })}</div>{/if}
 		</div>
 		<button type="button" class="btn small" onclick={() => (value = null)}>{m.change()}</button>
 	</div>
-	<input type="hidden" name="address" value={value.address} />
-	<input type="hidden" name="area" value={value.area} />
-	<input type="hidden" name="lat" value={value.lat} />
-	<input type="hidden" name="lon" value={value.lon} />
+	{#if hiddenInputs}
+		<input type="hidden" name="address" value={value.address} />
+		<input type="hidden" name="area" value={value.area} />
+		<input type="hidden" name="lat" value={value.lat} />
+		<input type="hidden" name="lon" value={value.lon} />
+	{/if}
 {:else}
 	<input
 		{id}
@@ -73,7 +92,7 @@
 		oninput={search}
 		onfocus={revealOnPhones}
 		enterkeyhint="search"
-		placeholder={m.place_search_placeholder()}
+		{placeholder}
 		autocomplete="off"
 	/>
 	{#if status === 'loading'}

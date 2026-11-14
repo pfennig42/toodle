@@ -11,7 +11,13 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	if (q.length < 3 || q.length > 200) return json([]);
 	if (!perUser.take(locals.user!.id)) error(429, 'Too many requests');
 	try {
-		return json(await geocode(q, locals.locale));
+		const lat = Number(url.searchParams.get('lat'));
+		const lon = Number(url.searchParams.get('lon'));
+		const near =
+			url.searchParams.has('lat') && Number.isFinite(lat) && Number.isFinite(lon)
+				? { lat, lon }
+				: undefined;
+		return json(await geocode(q, locals.locale, near));
 	} catch (err) {
 		console.error('[geocode]', err);
 		error(502, 'Geocoder unavailable');

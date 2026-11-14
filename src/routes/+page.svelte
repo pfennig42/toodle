@@ -13,7 +13,16 @@
 {/if}
 
 {#if data.events}
-	<div class="head">
+	{#if data.registered.length}
+		<h2 class="section-title">{m.dashboard_registered()}</h2>
+		<ul class="cards">
+			{#each data.registered as event (event.id)}
+				<li><EventCard {event} href={resolve('/e/[slug]', { slug: event.slug })} /></li>
+			{/each}
+		</ul>
+	{/if}
+
+	<div class="head" class:spaced-top={data.registered.length > 0}>
 		<h1>{m.dashboard_title()}</h1>
 		<a class="btn btn-primary" href={resolve('/events/new')}>{m.event_new()}</a>
 	</div>
@@ -77,6 +86,14 @@
 
 	.head h1 {
 		margin: 0;
+	}
+
+	.spaced-top {
+		margin-top: var(--space-8);
+	}
+
+	.section-title {
+		margin-bottom: var(--space-3);
 	}
 
 	.cards {
