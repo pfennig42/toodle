@@ -9,9 +9,17 @@
 
 	const tabs = $derived([
 		{ href: resolve('/events/[id]', { id: data.event.id }), label: m.event_tab_overview() },
+		{
+			href: resolve('/events/[id]/participants', { id: data.event.id }),
+			label: m.event_tab_participants()
+		},
+		{
+			href: resolve('/events/[id]/planning', { id: data.event.id }),
+			label: m.event_tab_planning()
+		},
+		{ href: resolve('/events/[id]/rides', { id: data.event.id }), label: m.event_tab_rides() },
 		{ href: resolve('/events/[id]/details', { id: data.event.id }), label: m.event_tab_details() },
 		{ href: resolve('/events/[id]/form', { id: data.event.id }), label: m.event_tab_form() },
-		{ href: resolve('/events/[id]/rides', { id: data.event.id }), label: m.event_tab_rides() },
 		{ href: resolve('/events/[id]/team', { id: data.event.id }), label: m.event_tab_team() }
 	]);
 </script>

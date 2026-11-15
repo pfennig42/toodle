@@ -384,3 +384,9 @@ textarea {
 	resize: vertical;
 	line-height: 1.5;
 }
+
+ul.plain {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}

@@ -175,12 +175,13 @@ type LegSpec = {
 	pickups?: { label: string; area: string; lat: number; lon: number }[];
 };
 
-/** Registers a user for an event directly in the database (travel legs, contacts). */
+/** Registers a user for an event directly in the database (travel legs, contacts, answers by field label). */
 export function registerDirect(
 	slug: string,
 	userId: string,
 	legs: Partial<Record<'to' | 'from', LegSpec>>,
-	contact?: { kind: string; value: string }
+	contact?: { kind: string; value: string },
+	answers: Record<string, unknown> = {}
 ) {
 	const db = new Database(DB_PATH);
 	const now = Math.floor(Date.now() / 1000);
@@ -214,6 +215,16 @@ export function registerDirect(
 				.run(randomUUID(), legId, i, p.label, p.area, p.lat, p.lon)
 		);
 	}
+	for (const [label, value] of Object.entries(answers)) {
+		const field = db
+			.prepare('select id from form_field where event_id = ? and label = ?')
+			.get(ev.id, label) as { id: string };
+		db.prepare('insert into answer (registration_id, field_id, value) values (?, ?, ?)').run(
+			regId,
+			field.id,
+			JSON.stringify(value)
+		);
+	}
 	if (contact) {
 		db.prepare(
 			'insert into contact (id, user_id, kind, value, created_at) values (?, ?, ?, ?, ?)'
@@ -221,4 +232,11 @@ export function registerDirect(
 	}
 	db.close();
 	return regId;
+}
+
+export function eventIdOf(slug: string): string {
+	const db = new Database(DB_PATH);
+	const row = db.prepare('select id from event where slug = ?').get(slug) as { id: string };
+	db.close();
+	return row.id;
 }

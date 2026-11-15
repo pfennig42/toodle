@@ -49,6 +49,7 @@
 
 	function formatAnswer(v: AnswerValue): string {
 		if (v === true) return m.yes();
+		if (v === false) return m.no();
 		if (Array.isArray(v)) return v.join(', ');
 		return String(v);
 	}
