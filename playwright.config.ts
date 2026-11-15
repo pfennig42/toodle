@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4317;
 export const E2E_DB = 'e2e/.tmp/test.db';
+export const E2E_OUTBOX = 'e2e/.tmp/outbox.jsonl';
 
 export default defineConfig({
 	testDir: 'e2e',
@@ -31,7 +32,10 @@ export default defineConfig({
 			PORT: String(PORT),
 			ORIGIN: `http://localhost:${PORT}`,
 			DATABASE_URL: E2E_DB,
-			SMTP_HOST: ''
+			SMTP_HOST: '',
+			// Mails are appended here so tests can read them; the notification job runs every second.
+			MAIL_OUTBOX: E2E_OUTBOX,
+			NOTIFY_INTERVAL: '1'
 		}
 	}
 });

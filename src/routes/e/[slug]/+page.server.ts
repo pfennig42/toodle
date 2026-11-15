@@ -15,6 +15,7 @@ import {
 	withdrawRegistration,
 	type FullRegistration
 } from '#lib/server/registrations.js';
+import { sendConfirmation } from '#lib/server/notifications.js';
 import type { Actions, PageServerLoad } from './$types';
 
 function isOrganizer(eventId: string, userId: string | undefined) {
@@ -200,6 +201,8 @@ export const actions: Actions = {
 			legs: travel.legs,
 			placesToSave: travel.placesToSave
 		});
+		// Confirmation only for new (or renewed) registrations, not for every edit.
+		if (!isActive) void sendConfirmation(e.id, me.id);
 		return { saved: true, wasRegistered: isActive };
 	},
 

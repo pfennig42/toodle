@@ -145,6 +145,11 @@ Per E-Mail, später Web-Push (PWA):
 - Erinnerungen: Anmeldefrist naht; Reise noch „offen“.
 - Jede Benachrichtigungsart abbestellbar.
 
+Umgesetzt (M6): Anmeldebestätigung mit Kalendereintrag; Mitfahr-Hinweise als Sammelmail (Umweg ≤ 20 min, Zeit passt;
+höchstens alle 3 h, jede Person nur einmal); Hinweis an Betroffene, wenn jemand anderes – z. B. die Orga – eine
+Mitfahrt einträgt; einmalige Erinnerung bei offener Reise (7 Tage vorher bzw. 2 Tage vor Anmeldeschluss). Abbestellen
+pro Art im Profil oder per Link ohne Login (Bestätigung per Knopf, damit Mail-Scanner nichts auslösen).
+
 ## 5. Anmelde-Ablauf
 
 1. Person öffnet den öffentlichen Link → sieht Event-Infos.
@@ -157,7 +162,9 @@ Per E-Mail, später Web-Push (PWA):
 
 ## 6. Nicht-funktionale Anforderungen
 
-- **PWA**: installierbar, responsive (mobile first), Offline-Ansicht der eigenen Anmeldungen.
+- **PWA**: installierbar, responsive (mobile first), Offline-Ansicht der eigenen Anmeldungen. Umgesetzt: Dashboard,
+  Event-Seiten und Mitfahr-Ansicht werden beim Besuch gespeichert (Netz zuerst, Kopie als Rückfall) und beim
+  Abmelden gelöscht; sonst eine Offline-Seite.
 - **Theme**: hell/dunkel, folgt dem System, manuell umschaltbar.
 - **Sprachen**: Deutsch und Englisch; alle Texte über i18n, sodass weitere EU-Sprachen nur Übersetzungsdateien sind.
   Datums-/Zeitformate nach Locale; Zeitzone pro Event.

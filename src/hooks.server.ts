@@ -7,10 +7,12 @@ import { paraglideMiddleware } from '#lib/paraglide/server.js';
 import { db, runMigrations } from '#lib/server/db/index.js';
 import { user } from '#lib/server/db/schema.js';
 import { validateSession } from '#lib/server/auth/index.js';
+import { startNotificationJob } from '#lib/server/notifications.js';
 import { parseTheme, THEME_COOKIE } from '#lib/theme/index.js';
 
 export const init: ServerInit = () => {
 	runMigrations();
+	startNotificationJob();
 };
 
 const handleParaglide: Handle = ({ event, resolve }) =>
@@ -39,7 +41,7 @@ const handleTheme: Handle = ({ event, resolve }) => {
 /** Pages that need a logged-in user. */
 const PROTECTED = ['/onboarding', '/profile', '/api', '/events', '/invite'];
 /** Pages a not-yet-onboarded user may visit. */
-const ONBOARDING_ALLOWED = ['/onboarding', '/logout', '/auth', '/api', '/healthz'];
+const ONBOARDING_ALLOWED = ['/onboarding', '/logout', '/auth', '/api', '/healthz', '/unsubscribe'];
 
 const startsWithAny = (path: string, prefixes: string[]) =>
 	prefixes.some((p) => path === p || path.startsWith(p + '/'));

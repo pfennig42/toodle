@@ -4,6 +4,7 @@ import { getEventForOrganizer, listFields } from '#lib/server/events.js';
 import { bestMatch, isDriver, isSeeker, searchPoints } from '#lib/server/ride-matching.js';
 import { publicLeg } from '#lib/server/ride-view.js';
 import { getLink, linkRide, loadRideData, unlinkRide } from '#lib/server/rides.js';
+import { notifyRideLink } from '#lib/server/notifications.js';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ params, locals }) => {
@@ -87,6 +88,13 @@ export const actions: Actions = {
 		if (!driver || !passenger || !isDriver(driver.legs[direction]) || driver === passenger)
 			return fail(400, { error: 'invalid' as const });
 		linkRide(e.id, direction, driver.registrationId, passenger.registrationId, locals.user!.id);
+		void notifyRideLink(
+			e.id,
+			direction,
+			driver.registrationId,
+			passenger.registrationId,
+			locals.user!.id
+		);
 		return { assigned: true };
 	},
 	unlink: async ({ params, locals, request }) => {

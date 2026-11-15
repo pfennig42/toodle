@@ -1,10 +1,18 @@
 {
+	"id": "/",
 	"name": "toodle",
 	"short_name": "toodle",
-	"description": "Event sign-up with ride sharing",
+	"description": "Veranstaltungen und Mitfahrgelegenheiten – Tüddelü, bis bald.",
+	"lang": "de",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",
+	"orientation": "portrait",
+	"categories": [
+		"social",
+		"travel",
+		"lifestyle"
+	],
 	"background_color": "#f7f5f0",
 	"theme_color": "#2f6b4f",
 	"icons": [
@@ -28,6 +36,30 @@
 			"sizes": "512x512",
 			"type": "image/png",
 			"purpose": "maskable"
+		}
+	],
+	"shortcuts": [
+		{
+			"name": "Meine Veranstaltungen",
+			"short_name": "Veranstaltungen",
+			"url": "/",
+			"icons": [
+				{
+					"src": "/icons/icon-192.png",
+					"sizes": "192x192"
+				}
+			]
+		},
+		{
+			"name": "Neue Veranstaltung",
+			"short_name": "Neu",
+			"url": "/events/new",
+			"icons": [
+				{
+					"src": "/icons/icon-192.png",
+					"sizes": "192x192"
+				}
+			]
 		}
 	]
 }

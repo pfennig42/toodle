@@ -27,6 +27,15 @@ Texte liegen in `messages/de.json` und `messages/en.json` (`npm run i18n` erzeug
 
 Ohne `SMTP_HOST` werden Mails (z. B. Login-Links) in der Server-Konsole ausgegeben.
 
+### Benachrichtigungen
+
+- **Sofort:** Anmeldebestätigung (mit Kalendereintrag) und Hinweis, wenn jemand anderes eine Mitfahrt einträgt.
+- **Hintergrund-Job** (alle `NOTIFY_INTERVAL` Sekunden, Standard 600, `0` = aus): Mitfahr-Hinweise an Suchende und
+  Fahrende (höchstens alle 3 h pro Person und Event, nie zweimal zur selben Person) und eine einmalige Erinnerung,
+  wenn die Reise 7 Tage vorher (bzw. 2 Tage vor Anmeldeschluss) noch offen ist.
+- Jede Art ist im Profil oder per Link in der Mail abbestellbar. Was verschickt wurde, steht in der Tabelle
+  `notification`.
+
 ## Betrieb (Docker + Caddy)
 
 Caddy läuft auf dem Server als eigener Container (`/srv/edge`) mit `network_mode: host`. toodle veröffentlicht

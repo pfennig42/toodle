@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import type { BrowserContext, Page } from '@playwright/test';
 
@@ -93,6 +94,7 @@ export function createEvent(
 		fields: FieldSpec[];
 		capacity?: number | null;
 		deadlinePassed?: boolean;
+		startsInDays?: number;
 	}
 ) {
 	const db = new Database(DB_PATH);
@@ -109,8 +111,8 @@ export function createEvent(
 		id,
 		slug,
 		opts.title,
-		now + 20 * day,
-		now + 22 * day,
+		now + (opts.startsInDays ?? 20) * day,
+		now + ((opts.startsInDays ?? 20) + 2) * day,
 		opts.deadlinePassed ? now - day : null,
 		opts.capacity ?? null,
 		ownerId,
@@ -239,4 +241,33 @@ export function eventIdOf(slug: string): string {
 	const row = db.prepare('select id from event where slug = ?').get(slug) as { id: string };
 	db.close();
 	return row.id;
+}
+
+/** Makes a registration look older (reminders skip fresh registrations). */
+export function ageRegistration(registrationId: string, days: number) {
+	const db = new Database(DB_PATH);
+	const t = Math.floor(Date.now() / 1000) - days * 86400;
+	db.prepare('update registration set created_at = ?, updated_at = ? where id = ?').run(
+		t,
+		t,
+		registrationId
+	);
+	db.close();
+}
+
+export type SentMail = { to: string; subject: string; text: string };
+
+/** All mails the server has "sent" so far (see MAIL_OUTBOX in playwright.config.ts). */
+export function outbox(to?: string): SentMail[] {
+	let raw: string;
+	try {
+		raw = readFileSync('e2e/.tmp/outbox.jsonl', 'utf-8');
+	} catch {
+		return [];
+	}
+	return raw
+		.split('\n')
+		.filter(Boolean)
+		.map((l) => JSON.parse(l) as SentMail)
+		.filter((m) => !to || m.to === to);
 }

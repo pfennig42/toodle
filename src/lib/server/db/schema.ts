@@ -21,9 +21,18 @@ export const user = sqliteTable(
 		passwordHash: text('password_hash'),
 		locale: text('locale'),
 		onboardedAt: integer('onboarded_at', { mode: 'timestamp' }),
+		/** Mail preferences (docs/konzept.md 4.7) – every kind can be switched off. */
+		notifyConfirmation: integer('notify_confirmation', { mode: 'boolean' }).notNull().default(true),
+		notifyRides: integer('notify_rides', { mode: 'boolean' }).notNull().default(true),
+		notifyReminders: integer('notify_reminders', { mode: 'boolean' }).notNull().default(true),
+		/** Secret for unsubscribe links in mails (work without logging in). */
+		unsubscribeToken: text('unsubscribe_token'),
 		createdAt: createdAt()
 	},
-	(t) => [uniqueIndex('user_email_idx').on(t.email)]
+	(t) => [
+		uniqueIndex('user_email_idx').on(t.email),
+		uniqueIndex('user_unsubscribe_idx').on(t.unsubscribeToken)
+	]
 );
 
 /** Session id = SHA-256 of the cookie token, so a leaked DB does not leak sessions. */
@@ -298,3 +307,37 @@ export const rideLink = sqliteTable(
 );
 
 export type RideLink = typeof rideLink.$inferSelect;
+
+export const NOTIFICATION_KINDS = [
+	'confirmation',
+	'ride_match',
+	'ride_link',
+	'travel_reminder'
+] as const;
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+
+/**
+ * What was already mailed – so nobody hears about the same thing twice. `ref` identifies the
+ * subject, e.g. "to:<registration id>" for a ride match or the registration id for reminders.
+ */
+export const notification = sqliteTable(
+	'notification',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id, { onDelete: 'cascade' }),
+		kind: text('kind', { enum: NOTIFICATION_KINDS }).notNull(),
+		ref: text('ref').notNull(),
+		/** null = only recorded (e.g. switched off), not mailed */
+		sentAt: integer('sent_at', { mode: 'timestamp' }),
+		createdAt: createdAt()
+	},
+	(t) => [
+		uniqueIndex('notification_unique_idx').on(t.userId, t.eventId, t.kind, t.ref),
+		index('notification_user_event_idx').on(t.userId, t.eventId, t.kind)
+	]
+);

@@ -17,11 +17,22 @@ import {
 	parsePlace,
 	updatePlace
 } from '#lib/server/profile.js';
+import { PREF_KINDS, setPreference } from '#lib/server/notifications.js';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals }) => {
 	const me = locals.user!;
+	const prefs = db
+		.select({
+			confirmation: user.notifyConfirmation,
+			rides: user.notifyRides,
+			reminders: user.notifyReminders
+		})
+		.from(user)
+		.where(eq(user.id, me.id))
+		.get()!;
 	return {
+		prefs,
 		profile: { name: me.name ?? '', email: me.email, hasPassword: me.hasPassword },
 		contacts: listContacts(me.id).map(({ id, kind, value }) => ({ id, kind, value })),
 		places: listPlaces(me.id).map(({ id, label, address, area, lat, lon }) => ({
@@ -79,6 +90,12 @@ export const actions: Actions = {
 		db.update(user).set({ passwordHash }).where(eq(user.id, locals.user!.id)).run();
 		destroyOtherSessions(locals.user!.id, cookies);
 		return { section: 'password', saved: true };
+	},
+
+	notifications: async ({ request, locals }) => {
+		const form = await request.formData();
+		for (const kind of PREF_KINDS) setPreference(locals.user!.id, kind, form.get(kind) === 'on');
+		return { section: 'notifications', saved: true };
 	},
 
 	removePassword: ({ locals }) => {

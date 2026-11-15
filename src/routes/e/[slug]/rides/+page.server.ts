@@ -14,6 +14,7 @@ import {
 } from '#lib/server/ride-matching.js';
 import { publicView } from '#lib/server/ride-view.js';
 import { getLink, linkRide, loadRideData, unlinkRide } from '#lib/server/rides.js';
+import { notifyRideLink } from '#lib/server/notifications.js';
 import type { Actions, PageServerLoad } from './$types';
 
 function access(slug: string, userId: string) {
@@ -106,6 +107,13 @@ export const actions: Actions = {
 		)
 			return fail(403, { error: 'forbidden' as const });
 		linkRide(e.id, direction, driver!.registrationId, passenger!.registrationId, locals.user.id);
+		void notifyRideLink(
+			e.id,
+			direction,
+			driver!.registrationId,
+			passenger!.registrationId,
+			locals.user.id
+		);
 		return { linked: true };
 	},
 

@@ -7,6 +7,7 @@
 	import Icon from '#lib/components/Icon.svelte';
 	import LocaleSwitch from '#lib/components/LocaleSwitch.svelte';
 	import ThemeToggle from '#lib/components/ThemeToggle.svelte';
+	import InstallApp from '#lib/components/InstallApp.svelte';
 	import type { LayoutProps } from './$types';
 
 	let { children, data }: LayoutProps = $props();
@@ -14,6 +15,21 @@
 	// Marker for end-to-end tests (and CSS, if ever needed): the app is interactive now.
 	onMount(() => {
 		document.documentElement.dataset.hydrated = '';
+		online = navigator.onLine;
+		const update = () => (online = navigator.onLine);
+		window.addEventListener('online', update);
+		window.addEventListener('offline', update);
+		return () => {
+			window.removeEventListener('online', update);
+			window.removeEventListener('offline', update);
+		};
+	});
+
+	let online = $state(true);
+
+	// Logged out (also when a session expired): drop the offline copy of the previous user's pages.
+	$effect(() => {
+		if (!data.user) navigator.serviceWorker?.controller?.postMessage('clear-pages');
 	});
 
 	const isActive = (path: string) =>
@@ -65,7 +81,12 @@
 			<span>{m.theme_label()}</span>
 			<ThemeToggle initial={data.theme} />
 		</div>
+		<InstallApp />
 	</div>
+
+	{#if !online}
+		<p class="offline" role="status">{m.offline_banner()}</p>
+	{/if}
 
 	<main>
 		{@render children()}
@@ -150,6 +171,15 @@
 	.top-nav a[aria-current='page'] {
 		color: var(--text);
 		font-weight: 600;
+	}
+
+	.offline {
+		margin: 0 0 var(--space-3);
+		padding: var(--space-2) var(--space-3);
+		border-radius: var(--radius);
+		background: var(--surface-2);
+		color: var(--text);
+		font-size: 0.9rem;
 	}
 
 	.settings {

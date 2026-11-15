@@ -18,6 +18,18 @@ export const variables = defineEnvVars({
 		description: 'Photon-compatible geocoding API used for the address search.',
 		schema: (value) => value || 'https://photon.komoot.io'
 	},
+	ORIGIN: {
+		description: 'Public URL of the app, e.g. https://toodle.lu – used for links in mails.',
+		schema: (value) => (value || 'http://localhost:5173').replace(/\/+$/, '')
+	},
+	NOTIFY_INTERVAL: {
+		description: 'Seconds between runs of the notification job (0 = off).',
+		schema: (value) => (value === undefined || value === '' ? 600 : Number(value))
+	},
+	MAIL_OUTBOX: {
+		description: 'Testing only: append every mail as a JSON line to this file.',
+		schema: optional
+	},
 	MAIL_FROM: {
 		description: 'Sender address, e.g. "toodle <noreply@toodle.lu>".',
 		schema: optional

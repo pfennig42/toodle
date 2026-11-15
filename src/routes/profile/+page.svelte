@@ -17,6 +17,8 @@
 	let contactValue = $state('');
 	// svelte-ignore state_referenced_locally
 	let name = $state(data.profile.name);
+	// svelte-ignore state_referenced_locally
+	let prefs = $state({ ...data.prefs });
 
 	const errorText = {
 		name: m.error_name,
@@ -165,6 +167,37 @@
 	</section>
 
 	<section class="card">
+		<h2>{m.profile_notify_title()}</h2>
+		<form method="post" action="?/notifications" class="stack" use:enhance={keep}>
+			<p class="muted small">{m.profile_notify_hint()}</p>
+			<label class="check">
+				<input type="checkbox" name="confirmation" bind:checked={prefs.confirmation} />
+				<span>{m.profile_notify_confirmation()}</span>
+			</label>
+			<label class="check">
+				<input type="checkbox" name="rides" bind:checked={prefs.rides} />
+				<span
+					>{m.profile_notify_rides()}<br /><span class="muted small"
+						>{m.profile_notify_rides_hint()}</span
+					></span
+				>
+			</label>
+			<label class="check">
+				<input type="checkbox" name="reminders" bind:checked={prefs.reminders} />
+				<span
+					>{m.profile_notify_reminders()}<br /><span class="muted small"
+						>{m.profile_notify_reminders_hint()}</span
+					></span
+				>
+			</label>
+			<div class="actions">
+				<button class="btn btn-primary">{m.save()}</button>
+				{#if saved('notifications')}<span class="muted small" role="status">{m.saved()}</span>{/if}
+			</div>
+		</form>
+	</section>
+
+	<section class="card">
 		<h2>{m.profile_password_title()}</h2>
 		<p class="muted small">
 			{data.profile.hasPassword ? m.profile_password_set() : m.profile_password_none()}
@@ -216,3 +249,22 @@
 		</form>
 	</section>
 </div>
+
+<style>
+	.check {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-3);
+		min-height: var(--touch);
+		padding-block: var(--space-2);
+		cursor: pointer;
+	}
+
+	.check input {
+		width: 1.25rem;
+		height: 1.25rem;
+		margin-top: 0.1rem;
+		flex-shrink: 0;
+		accent-color: var(--accent);
+	}
+</style>
