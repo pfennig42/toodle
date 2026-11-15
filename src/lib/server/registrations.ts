@@ -3,6 +3,7 @@ import type { AnswerValue } from '../registration.js';
 import { db } from './db/index.js';
 import { answer, event, pickupOption, registration, travelLeg, type Event } from './db/schema.js';
 import { addPlace, listPlaces } from './profile.js';
+import { cleanupRideLinks } from './rides.js';
 import type { ParsedLeg, PlaceSnapshot } from './registration-rules.js';
 
 export function getRegistration(eventId: string, userId: string) {
@@ -130,6 +131,8 @@ export function saveRegistration(input: {
 		for (const p of input.placesToSave) {
 			if (!known.some((k) => k.address === p.address)) addPlace(input.userId, p);
 		}
+		// e.g. a driver switched to the train – their passengers are free again
+		cleanupRideLinks(input.eventId);
 	});
 }
 
@@ -138,6 +141,7 @@ export function withdrawRegistration(eventId: string, userId: string) {
 		.set({ status: 'withdrawn', updatedAt: new Date() })
 		.where(and(eq(registration.eventId, eventId), eq(registration.userId, userId)))
 		.run();
+	cleanupRideLinks(eventId);
 }
 
 /** Events the user is (actively) registered for – for the dashboard. */

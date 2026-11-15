@@ -112,6 +112,9 @@
 					<a href={resolve('/profile')}>{m.registration_add_contact()}</a>
 				</p>
 			{/if}
+			<a class="btn btn-primary align-start" href={resolve('/e/[slug]/rides', { slug: ev.slug })}
+				>{m.rides_open()}</a
+			>
 			<div class="actions">
 				{#if canEditTravel}
 					<button type="button" class="btn" onclick={() => (editing = true)}>

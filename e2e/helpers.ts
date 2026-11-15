@@ -165,3 +165,60 @@ export function localDateTime(daysFromNow: number, hour: number) {
 export async function ready(page: Page) {
 	await page.waitForSelector('html[data-hydrated]');
 }
+
+type LegSpec = {
+	mode: 'car' | 'transit' | 'seeking' | 'undecided';
+	area?: string;
+	lat?: number;
+	lon?: number;
+	carStatus?: 'offering' | 'full' | 'not_offering';
+	pickups?: { label: string; area: string; lat: number; lon: number }[];
+};
+
+/** Registers a user for an event directly in the database (travel legs, contacts). */
+export function registerDirect(
+	slug: string,
+	userId: string,
+	legs: Partial<Record<'to' | 'from', LegSpec>>,
+	contact?: { kind: string; value: string }
+) {
+	const db = new Database(DB_PATH);
+	const now = Math.floor(Date.now() / 1000);
+	const ev = db.prepare('select id from event where slug = ?').get(slug) as { id: string };
+	const regId = randomUUID();
+	db.prepare(
+		"insert into registration (id, event_id, user_id, status, comment, created_at, updated_at) values (?, ?, ?, 'active', '', ?, ?)"
+	).run(regId, ev.id, userId, now, now);
+	for (const [direction, leg] of Object.entries(legs)) {
+		const legId = randomUUID();
+		db.prepare(
+			`insert into travel_leg (id, registration_id, direction, time, mode, place_label, place_address, place_area, lat, lon, car_status, car_note)
+			 values (?, ?, ?, null, ?, ?, ?, ?, ?, ?, ?, '')`
+		).run(
+			legId,
+			regId,
+			direction,
+			leg.mode,
+			leg.area ? 'Zuhause' : null,
+			leg.area ? `Geheimstraße 1, ${leg.area}` : null,
+			leg.area ?? null,
+			leg.lat ?? null,
+			leg.lon ?? null,
+			leg.mode === 'car' ? (leg.carStatus ?? 'offering') : null
+		);
+		(leg.pickups ?? []).forEach((p, i) =>
+			db
+				.prepare(
+					'insert into pickup_option (id, leg_id, position, label, area, lat, lon, time) values (?, ?, ?, ?, ?, ?, ?, null)'
+				)
+				.run(randomUUID(), legId, i, p.label, p.area, p.lat, p.lon)
+		);
+	}
+	if (contact) {
+		db.prepare(
+			'insert into contact (id, user_id, kind, value, created_at) values (?, ?, ?, ?, ?)'
+		).run(randomUUID(), userId, contact.kind, contact.value, now);
+	}
+	db.close();
+	return regId;
+}

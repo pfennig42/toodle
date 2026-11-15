@@ -268,3 +268,33 @@ export const pickupOption = sqliteTable(
 export type Registration = typeof registration.$inferSelect;
 export type TravelLeg = typeof travelLeg.$inferSelect;
 export type PickupOption = typeof pickupOption.$inferSelect;
+
+/**
+ * Soft signal "passenger rides with driver" for one direction. Not a booking – it just
+ * tells everyone (and the organizers) that this person is taken care of.
+ */
+export const rideLink = sqliteTable(
+	'ride_link',
+	{
+		id: id(),
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id, { onDelete: 'cascade' }),
+		direction: text('direction', { enum: TRAVEL_DIRECTIONS }).notNull(),
+		driverRegistrationId: text('driver_registration_id')
+			.notNull()
+			.references(() => registration.id, { onDelete: 'cascade' }),
+		passengerRegistrationId: text('passenger_registration_id')
+			.notNull()
+			.references(() => registration.id, { onDelete: 'cascade' }),
+		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+		createdAt: createdAt()
+	},
+	(t) => [
+		// one driver per passenger and direction
+		uniqueIndex('ride_link_passenger_idx').on(t.passengerRegistrationId, t.direction),
+		index('ride_link_event_idx').on(t.eventId, t.direction)
+	]
+);
+
+export type RideLink = typeof rideLink.$inferSelect;
