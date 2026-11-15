@@ -23,7 +23,8 @@ npm run dev
 
 Migrationen in `drizzle/` werden beim Serverstart automatisch angewendet.
 
-Texte liegen in `messages/de.json` und `messages/en.json` (`npm run i18n` erzeugt daraus `src/lib/paraglide`).
+Texte liegen in `messages/{de,en,fr,nl}.json` (`npm run i18n` erzeugt daraus `src/lib/paraglide`). Neue Sprache:
+Datei anlegen, Kürzel in `project.inlang/settings.json` ergänzen, Namen in `src/lib/components/LocaleSwitch.svelte`.
 
 Ohne `SMTP_HOST` werden Mails (z. B. Login-Links) in der Server-Konsole ausgegeben.
 
@@ -52,3 +53,26 @@ bzw. passend zum Dateinamen).
 
 Die Datenbank liegt im Volume `toodle_data` (`/data/toodle.db`). Backup: Datei kopieren
 (bei laufendem Betrieb besser per `sqlite3 /data/toodle.db '.backup /data/backup.db'`).
+
+### Push-Benachrichtigungen
+
+Funktionieren ohne Konfiguration: Die VAPID-Schlüssel werden beim ersten Bedarf erzeugt und in der Tabelle
+`app_setting` gespeichert (per `VAPID_*` überschreibbar). Wer Push auf einem Gerät einschaltet, bekommt
+Mitfahr-Hinweise und Erinnerungen dorthin statt per Mail (optional zusätzlich per Mail). Anmeldebestätigungen kommen
+immer per Mail. Der Server sendet nur an die Push-Dienste der gängigen Browser (Google, Mozilla, Apple, Microsoft).
+
+### Echte Fahrzeiten (optional)
+
+Standardmäßig schätzt toodle Umwege über die Luftlinie (× 1,3, 60 km/h). Mit `ROUTING_URL` auf einen eigenen
+[OSRM](https://github.com/Project-OSRM/osrm-backend)-Server werden echte Fahrzeiten genutzt – eine Tabellen-Anfrage pro
+Veranstaltung, 10 Minuten zwischengespeichert. Fällt der Server aus, rechnet toodle mit der Schätzung weiter.
+Koordinaten gehen dabei an den Routing-Server – deshalb nur einen selbst betriebenen verwenden, nicht den öffentlichen
+Demo-Server. Beispiel mit dem Deutschland-Auszug (braucht beim Vorbereiten einige GB RAM):
+
+```sh
+wget https://download.geofabrik.de/europe/germany-latest.osm.pbf
+docker run --rm -v "$PWD:/data" ghcr.io/project-osrm/osrm-backend osrm-extract -p /opt/car.lua /data/germany-latest.osm.pbf
+docker run --rm -v "$PWD:/data" ghcr.io/project-osrm/osrm-backend osrm-partition /data/germany-latest.osrm
+docker run --rm -v "$PWD:/data" ghcr.io/project-osrm/osrm-backend osrm-customize /data/germany-latest.osrm
+docker run -d -p 127.0.0.1:5000:5000 -v "$PWD:/data" ghcr.io/project-osrm/osrm-backend osrm-routed --algorithm mld /data/germany-latest.osrm
+```

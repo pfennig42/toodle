@@ -5,7 +5,7 @@
 import { utcToZoned, zonedToUtc } from '../datetime.js';
 import type { FieldConfig, FieldType } from '../forms.js';
 import type { AnswerValue, TravelMode } from '../registration.js';
-import { distanceKm, driveMinutes, type Point } from './ride-matching.js';
+import { straightLine, type Point, type TravelTime } from './ride-matching.js';
 
 export type PlanningLeg = {
 	mode: TravelMode;
@@ -44,7 +44,8 @@ export type Stay = {
  */
 export function stayOf(
 	person: Pick<PlanningPerson, 'legs'>,
-	ev: { startsAt: Date; endsAt: Date; point: Point | null }
+	ev: { startsAt: Date; endsAt: Date; point: Point | null },
+	travel: TravelTime = straightLine
 ): Stay {
 	let arrive: Date | null = null;
 	const to = person.legs.to;
@@ -55,11 +56,11 @@ export function stayOf(
 		if (to.mode === 'transit' && pickupTimes.length) {
 			arrive = new Date(Math.min(...pickupTimes));
 		} else if (to.time) {
-			const travel =
+			const minutes =
 				ev.point && to.lat !== null && to.lon !== null
-					? driveMinutes(distanceKm({ lat: to.lat, lon: to.lon }, ev.point))
+					? travel({ lat: to.lat, lon: to.lon }, ev.point)
 					: 0;
-			arrive = new Date(to.time.getTime() + Math.round(travel) * 60000);
+			arrive = new Date(to.time.getTime() + Math.round(minutes) * 60000);
 		}
 	}
 	const leave = person.legs.from?.time ?? null;
@@ -147,10 +148,11 @@ export type DayPlan = {
 export function dayPlans(
 	people: PlanningPerson[],
 	fields: PlanningField[],
-	ev: { startsAt: Date; endsAt: Date; timezone: string; point: Point | null }
+	ev: { startsAt: Date; endsAt: Date; timezone: string; point: Point | null },
+	travel: TravelTime = straightLine
 ): DayPlan[] {
 	const days = eventDays(ev.startsAt, ev.endsAt, ev.timezone);
-	const stays = people.map((p) => ({ person: p, stay: stayOf(p, ev) }));
+	const stays = people.map((p) => ({ person: p, stay: stayOf(p, ev, travel) }));
 	const dayStart = (day: string) => zonedToUtc(`${day}T00:00`, ev.timezone)!;
 	const localDay = (d: Date) => utcToZoned(d, ev.timezone).slice(0, 10);
 	const clamp = (day: string) =>

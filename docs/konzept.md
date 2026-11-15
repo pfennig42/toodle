@@ -230,6 +230,9 @@ verändern.
 | M6  | E-Mail-Benachrichtigungen, PWA-Feinschliff (Offline, Installierbarkeit)                                                    | Spontane Fahrende werden aktiviert          |
 | M7  | Web-Push, weitere Sprachen, optional echtes Routing                                                                        | Ausbau                                      |
 
+Stand M7: Web-Push pro Gerät (ersetzt Hinweis-Mails, Bestätigungen bleiben Mail), Sprachen DE/EN/FR/NL, optionales
+Routing über einen selbst betriebenen OSRM-Server (`ROUTING_URL`), sonst Luftlinien-Schätzung.
+
 ## 10. Bewusst nicht
 
 Platz- und Gepäckverwaltung · verbindliche Buchungen · automatische Zuordnung in Autos · In-App-Chat · Bezahlung ·

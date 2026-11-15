@@ -271,3 +271,20 @@ export function outbox(to?: string): SentMail[] {
 		.map((l) => JSON.parse(l) as SentMail)
 		.filter((m) => !to || m.to === to);
 }
+
+export type SentPush = { userId: string; title: string; body: string; url: string };
+
+/** Push messages the server has "sent" (see PUSH_OUTBOX in playwright.config.ts). */
+export function pushOutbox(userId?: string): SentPush[] {
+	let raw: string;
+	try {
+		raw = readFileSync('e2e/.tmp/push.jsonl', 'utf-8');
+	} catch {
+		return [];
+	}
+	return raw
+		.split('\n')
+		.filter(Boolean)
+		.map((l) => JSON.parse(l) as SentPush)
+		.filter((p) => !userId || p.userId === userId);
+}

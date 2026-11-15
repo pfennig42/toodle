@@ -106,3 +106,41 @@ sw.addEventListener('fetch', (event) => {
 sw.addEventListener('message', (event) => {
 	if (event.data === 'clear-pages') event.waitUntil(caches.delete(PAGES));
 });
+
+/* -------------------------------------------------------------------- push */
+
+type PushPayload = { title: string; body: string; url: string; tag?: string };
+
+sw.addEventListener('push', (event) => {
+	let data: PushPayload;
+	try {
+		data = event.data?.json() as PushPayload;
+	} catch {
+		return;
+	}
+	if (!data?.title) return;
+	event.waitUntil(
+		sw.registration.showNotification(data.title, {
+			body: data.body,
+			tag: data.tag,
+			icon: '/icons/icon-192.png',
+			badge: '/icons/favicon-32.png',
+			lang: '',
+			data: { url: data.url }
+		})
+	);
+});
+
+sw.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	// only our own pages – never navigate somewhere else
+	const target = new URL((event.notification.data?.url as string) || '/', sw.location.origin);
+	if (target.origin !== sw.location.origin) return;
+	event.waitUntil(
+		sw.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+			const open = windows.find((w) => new URL(w.url).origin === sw.location.origin);
+			if (open) return open.navigate(target.href).then((w) => (w ?? open).focus());
+			return sw.clients.openWindow(target.href);
+		})
+	);
+});

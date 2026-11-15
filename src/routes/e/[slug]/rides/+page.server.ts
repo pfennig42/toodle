@@ -15,6 +15,7 @@ import {
 import { publicView } from '#lib/server/ride-view.js';
 import { getLink, linkRide, loadRideData, unlinkRide } from '#lib/server/rides.js';
 import { notifyRideLink } from '#lib/server/notifications.js';
+import { rideTravelTime } from '#lib/server/routing.js';
 import type { Actions, PageServerLoad } from './$types';
 
 function access(slug: string, userId: string) {
@@ -34,7 +35,7 @@ function access(slug: string, userId: string) {
 const directionsOf = (eventId: string): TravelDirection[] =>
 	listFields(eventId).find((f) => f.type === 'travel')?.config.directions ?? [];
 
-export const load: PageServerLoad = ({ params, locals, url }) => {
+export const load: PageServerLoad = async ({ params, locals, url }) => {
 	if (!locals.user) redirect(303, `/login?next=${encodeURIComponent(url.pathname)}`);
 	const { e, isOrganizer, data, me } = access(params.slug, locals.user.id);
 	const event = { id: e.id, slug: e.slug, title: e.title, timezone: e.timezone };
@@ -45,6 +46,7 @@ export const load: PageServerLoad = ({ params, locals, url }) => {
 	const direction = directions.includes(requested) ? requested : (directions[0] ?? 'to');
 	const eventPoint = e.lat !== null && e.lon !== null ? { lat: e.lat, lon: e.lon } : null;
 
+	const travel = await rideTravelTime(data.participants, eventPoint);
 	const counts = Object.fromEntries(
 		directions.map((d) => [
 			d,
@@ -71,7 +73,8 @@ export const load: PageServerLoad = ({ params, locals, url }) => {
 						data.links,
 						me?.registrationId ?? null,
 						direction,
-						eventPoint
+						eventPoint,
+						travel
 					)
 				)
 			: null,

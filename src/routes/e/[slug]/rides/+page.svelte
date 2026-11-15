@@ -250,19 +250,23 @@
 
 	{#if v.role === 'driver'}
 		{@render seekerList(m.rides_seekers_on_route(), m.rides_seekers_hint())}
-		<details class="more">
-			<summary>{m.rides_other_drivers({ count: v.drivers.length })}</summary>
-			{@render driverList()}
-		</details>
+		{#if v.drivers.length}
+			<details class="more">
+				<summary>{m.rides_other_drivers({ count: v.drivers.length })}</summary>
+				{@render driverList()}
+			</details>
+		{/if}
 	{:else}
 		{@render driverList()}
-		<details class="more">
-			<summary>{m.rides_other_seekers({ count: v.seekers.length })}</summary>
-			{@render seekerList(
-				m.rides_seekers_all(),
-				v.role === 'seeker' ? m.rides_seekers_together() : null
-			)}
-		</details>
+		{#if v.seekers.length}
+			<details class="more">
+				<summary>{m.rides_other_seekers({ count: v.seekers.length })}</summary>
+				{@render seekerList(
+					m.rides_seekers_all(),
+					v.role === 'seeker' ? m.rides_seekers_together() : null
+				)}
+			</details>
+		{/if}
 	{/if}
 {/if}
 

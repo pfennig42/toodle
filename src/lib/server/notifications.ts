@@ -22,7 +22,8 @@ import {
 } from './db/schema.js';
 import { eventIcs } from './ics.js';
 import { withLocale } from './locale-context.js';
-import { renderMail, trySendMail } from './mail.js';
+import { renderMail, trySendMail, type Mail } from './mail.js';
+import { sendPush, type PushMessage } from './push.js';
 import {
 	groupNotices,
 	matchRef,
@@ -32,6 +33,7 @@ import {
 	type MatchNotice
 } from './notify-rules.js';
 import { loadRideData } from './rides.js';
+import { rideTravelTime } from './routing.js';
 
 export const PREF_KINDS = ['confirmation', 'rides', 'reminders'] as const;
 export type PrefKind = (typeof PREF_KINDS)[number];
@@ -122,15 +124,33 @@ function matchLine(n: MatchNotice): string {
 }
 
 /** Current matches for one person (used in the confirmation mail). */
-function matchesFor(e: Event, registrationId: string, now = new Date()) {
+async function matchesFor(e: Event, registrationId: string, now = new Date()) {
 	const point = eventPoint(e);
 	if (!point) return [];
 	const { participants, links } = loadRideData(e.id);
 	const dirs = openDirections(travelDirections(e.id), e, now);
-	return rideMatchNotices(participants, links, point, dirs).filter(
+	const travel = await rideTravelTime(participants, point);
+	return rideMatchNotices(participants, links, point, dirs, travel).filter(
 		(n) => n.registrationId === registrationId
 	);
 }
+
+/**
+ * Hints and reminders: push to the user's devices if there are any, by mail otherwise
+ * (or in addition, if the user wants both). True when something reached the user.
+ */
+async function deliver(u: Recipient, mail: Mail, push: PushMessage): Promise<boolean> {
+	let pushed = 0;
+	try {
+		pushed = await sendPush(u.id, push);
+	} catch (err) {
+		console.error('[notify] push failed', err);
+	}
+	if (pushed > 0 && !u.mailWithPush) return true;
+	return (await trySendMail(mail)) || pushed > 0;
+}
+
+const path = (url: string) => url.slice(ORIGIN.length) || '/';
 
 /* ------------------------------------------------------------ confirmation */
 
@@ -147,7 +167,7 @@ export async function sendConfirmation(eventId: string, userId: string) {
 		if (!e || !u || !reg) return;
 
 		// Matches that exist now are shown in this mail – no separate hint mail for them later.
-		const matches = matchesFor(e, reg.id);
+		const matches = await matchesFor(e, reg.id);
 		for (const n of matches) record(u.id, e.id, 'ride_match', matchRef(n), false);
 		if (!u.notifyConfirmation) return;
 		record(u.id, e.id, 'confirmation', `${reg.id}:${Date.now()}`, true);
@@ -260,18 +280,19 @@ export async function notifyRideLink(
 			if (!record(recipient.id, e.id, 'ride_link', ref, recipient.notifyRides)) continue;
 			if (!recipient.notifyRides) continue;
 			const byOrga = actor.id !== other.id;
-			const mail = withLocale(recipient.locale, () => {
+			const { mail, push } = withLocale(recipient.locale, () => {
 				const vars = {
 					name: displayName(other),
 					title: e.title,
 					direction: dirLabel(direction),
 					actor: displayName(actor)
 				};
-				return {
+				const subject = isDriver
+					? m.mail_link_driver_subject(vars)
+					: m.mail_link_passenger_subject(vars);
+				const mail: Mail = {
 					to: recipient.email,
-					subject: isDriver
-						? m.mail_link_driver_subject(vars)
-						: m.mail_link_passenger_subject(vars),
+					subject,
 					...renderMail({
 						paragraphs: [
 							m.mail_hello({ name: displayName(recipient) }),
@@ -288,8 +309,20 @@ export async function notifyRideLink(
 					}),
 					unsubscribeUrl: unsubscribeUrl(recipient, 'rides')
 				};
+				const push: PushMessage = {
+					title: subject,
+					body: [
+						isDriver ? m.mail_link_driver_text(vars) : m.mail_link_passenger_text(vars),
+						byOrga ? m.mail_link_by({ actor: vars.actor }) : ''
+					]
+						.filter(Boolean)
+						.join(' '),
+					url: path(ridesUrl(e, direction)),
+					tag: `link-${e.id}-${direction}`
+				};
+				return { mail, push };
 			});
-			await trySendMail(mail);
+			await deliver(recipient, mail, push);
 		}
 	} catch (err) {
 		console.error('[notify] ride link failed', err);
@@ -303,7 +336,8 @@ async function rideMatchMails(e: Event, now: Date) {
 	const dirs = openDirections(travelDirections(e.id), e, now);
 	if (!point || !dirs.length) return 0;
 	const { participants, links } = loadRideData(e.id);
-	const notices = rideMatchNotices(participants, links, point, dirs);
+	const travel = await rideTravelTime(participants, point);
+	const notices = rideMatchNotices(participants, links, point, dirs, travel);
 	if (!notices.length) return 0;
 
 	const rows = db
@@ -333,27 +367,37 @@ async function rideMatchMails(e: Event, now: Date) {
 		for (const n of list) record(u.id, e.id, 'ride_match', matchRef(n), u.notifyRides);
 		if (!u.notifyRides) continue;
 		const seeking = list.some((n) => n.role === 'seeker');
-		const mail = withLocale(u.locale, () => ({
-			to: u.email,
-			subject: seeking
+		const { mail, push } = withLocale(u.locale, () => {
+			const subject = seeking
 				? m.mail_match_subject_seeker({ title: e.title })
-				: m.mail_match_subject_driver({ title: e.title }),
-			...renderMail({
-				paragraphs: [
-					m.mail_hello({ name: displayName(u) }),
-					seeking
-						? m.mail_match_intro_seeker({ title: e.title })
-						: m.mail_match_intro_driver({ title: e.title })
-				],
-				items: list.slice(0, 10).map(matchLine),
-				after: [m.mail_match_hint()],
-				action: { label: m.mail_button_rides(), url: ridesUrl(e, list[0].direction) },
-				footer: m.mail_rides_footer(),
-				unsubscribe: { label: m.mail_unsubscribe_rides(), url: unsubscribeUrl(u, 'rides') }
-			}),
-			unsubscribeUrl: unsubscribeUrl(u, 'rides')
-		}));
-		if (await trySendMail(mail)) sent++;
+				: m.mail_match_subject_driver({ title: e.title });
+			const mail: Mail = {
+				to: u.email,
+				subject,
+				...renderMail({
+					paragraphs: [
+						m.mail_hello({ name: displayName(u) }),
+						seeking
+							? m.mail_match_intro_seeker({ title: e.title })
+							: m.mail_match_intro_driver({ title: e.title })
+					],
+					items: list.slice(0, 10).map(matchLine),
+					after: [m.mail_match_hint()],
+					action: { label: m.mail_button_rides(), url: ridesUrl(e, list[0].direction) },
+					footer: m.mail_rides_footer(),
+					unsubscribe: { label: m.mail_unsubscribe_rides(), url: unsubscribeUrl(u, 'rides') }
+				}),
+				unsubscribeUrl: unsubscribeUrl(u, 'rides')
+			};
+			const push: PushMessage = {
+				title: subject,
+				body: list.slice(0, 3).map(matchLine).join('\n'),
+				url: path(ridesUrl(e, list[0].direction)),
+				tag: `match-${e.id}`
+			};
+			return { mail, push };
+		});
+		if (await deliver(u, mail, push)) sent++;
 	}
 	return sent;
 }
@@ -388,25 +432,35 @@ async function travelReminders(e: Event, now: Date) {
 		if (!travelReminderDue(e, { updatedAt: reg.updatedAt, legs: mine }, dirs, now)) continue;
 		if (!record(u.id, e.id, 'travel_reminder', reg.id, u.notifyReminders)) continue;
 		if (!u.notifyReminders) continue;
-		const mail = withLocale(u.locale, () => ({
-			to: u.email,
-			subject: m.mail_reminder_subject({ title: e.title }),
-			...renderMail({
-				paragraphs: [
-					m.mail_hello({ name: displayName(u) }),
-					m.mail_reminder_text({ title: e.title }),
-					...(drivers ? [m.mail_reminder_drivers({ count: drivers })] : [])
-				],
-				action: { label: m.mail_reminder_button(), url: eventUrl(e) },
-				footer: m.mail_reminder_footer(),
-				unsubscribe: {
-					label: m.mail_unsubscribe_reminders(),
-					url: unsubscribeUrl(u, 'reminders')
-				}
-			}),
-			unsubscribeUrl: unsubscribeUrl(u, 'reminders')
-		}));
-		if (await trySendMail(mail)) sent++;
+		const { mail, push } = withLocale(u.locale, () => {
+			const subject = m.mail_reminder_subject({ title: e.title });
+			const mail: Mail = {
+				to: u.email,
+				subject,
+				...renderMail({
+					paragraphs: [
+						m.mail_hello({ name: displayName(u) }),
+						m.mail_reminder_text({ title: e.title }),
+						...(drivers ? [m.mail_reminder_drivers({ count: drivers })] : [])
+					],
+					action: { label: m.mail_reminder_button(), url: eventUrl(e) },
+					footer: m.mail_reminder_footer(),
+					unsubscribe: {
+						label: m.mail_unsubscribe_reminders(),
+						url: unsubscribeUrl(u, 'reminders')
+					}
+				}),
+				unsubscribeUrl: unsubscribeUrl(u, 'reminders')
+			};
+			const push: PushMessage = {
+				title: subject,
+				body: m.push_reminder_body(),
+				url: path(eventUrl(e)),
+				tag: `reminder-${e.id}`
+			};
+			return { mail, push };
+		});
+		if (await deliver(u, mail, push)) sent++;
 	}
 	return sent;
 }

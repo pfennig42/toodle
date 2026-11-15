@@ -5,15 +5,17 @@ import { bestMatch, isDriver, isSeeker, searchPoints } from '#lib/server/ride-ma
 import { publicLeg } from '#lib/server/ride-view.js';
 import { getLink, linkRide, loadRideData, unlinkRide } from '#lib/server/rides.js';
 import { notifyRideLink } from '#lib/server/notifications.js';
+import { rideTravelTime } from '#lib/server/routing.js';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
 	const e = getEventForOrganizer(params.id, locals.user!.id)!;
 	const directions: TravelDirection[] =
 		listFields(e.id).find((f) => f.type === 'travel')?.config.directions ?? [];
 	const { participants, links } = loadRideData(e.id);
 	const eventPoint = e.lat !== null && e.lon !== null ? { lat: e.lat, lon: e.lon } : null;
 	const byId = new Map(participants.map((p) => [p.registrationId, p]));
+	const travel = await rideTravelTime(participants, eventPoint);
 
 	const overview = directions.map((direction) => {
 		const dirLinks = links.filter((l) => l.direction === direction);
@@ -46,7 +48,8 @@ export const load: PageServerLoad = ({ params, locals }) => {
 								name: d.name,
 								carStatus: d.legs[direction]!.carStatus,
 								detourMin: eventPoint
-									? (bestMatch(d.legs[direction]!, pts, eventPoint, direction)?.detourMin ?? null)
+									? (bestMatch(d.legs[direction]!, pts, eventPoint, direction, travel)?.detourMin ??
+										null)
 									: null
 							}))
 							.sort((a, b) => (a.detourMin ?? Infinity) - (b.detourMin ?? Infinity))

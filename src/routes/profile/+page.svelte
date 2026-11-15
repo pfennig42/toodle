@@ -4,6 +4,7 @@
 	import { contactKindLabel } from '#lib/labels.js';
 	import AddressSearch from '#lib/components/AddressSearch.svelte';
 	import ContactKindSelect from '#lib/components/ContactKindSelect.svelte';
+	import PushSettings from '#lib/components/PushSettings.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -190,11 +191,43 @@
 					></span
 				>
 			</label>
+			{#if data.devices.length}
+				<label class="check">
+					<input type="checkbox" name="mailWithPush" bind:checked={prefs.mailWithPush} />
+					<span
+						>{m.profile_mail_with_push()}<br /><span class="muted small"
+							>{m.profile_mail_with_push_hint()}</span
+						></span
+					>
+				</label>
+			{/if}
 			<div class="actions">
 				<button class="btn btn-primary">{m.save()}</button>
 				{#if saved('notifications')}<span class="muted small" role="status">{m.saved()}</span>{/if}
 			</div>
 		</form>
+	</section>
+
+	<section class="card stack">
+		<h2>{m.push_title()}</h2>
+		<p class="muted small">{m.push_hint()}</p>
+		<PushSettings />
+		{#if data.devices.length}
+			<div>
+				<p class="small muted">{m.push_devices()}</p>
+				<ul class="list">
+					{#each data.devices as d (d.id)}
+						<li>
+							<span>{d.label || m.push_device_unknown()}</span>
+							<form method="post" action="?/removeDevice" use:enhance>
+								<input type="hidden" name="id" value={d.id} />
+								<button class="btn small">{m.remove()}</button>
+							</form>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 	</section>
 
 	<section class="card">

@@ -25,6 +25,8 @@ export const user = sqliteTable(
 		notifyConfirmation: integer('notify_confirmation', { mode: 'boolean' }).notNull().default(true),
 		notifyRides: integer('notify_rides', { mode: 'boolean' }).notNull().default(true),
 		notifyReminders: integer('notify_reminders', { mode: 'boolean' }).notNull().default(true),
+		/** With push enabled on a device: still send hints and reminders by mail as well? */
+		mailWithPush: integer('mail_with_push', { mode: 'boolean' }).notNull().default(false),
 		/** Secret for unsubscribe links in mails (work without logging in). */
 		unsubscribeToken: text('unsubscribe_token'),
 		createdAt: createdAt()
@@ -341,3 +343,27 @@ export const notification = sqliteTable(
 		index('notification_user_event_idx').on(t.userId, t.eventId, t.kind)
 	]
 );
+
+/** Web push subscriptions – one per device/browser (docs/konzept.md 4.7). */
+export const pushSubscription = sqliteTable(
+	'push_subscription',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		endpoint: text('endpoint').notNull(),
+		p256dh: text('p256dh').notNull(),
+		auth: text('auth').notNull(),
+		/** e.g. "Firefox · Android" – so people can tell their devices apart */
+		label: text('label').notNull().default(''),
+		createdAt: createdAt()
+	},
+	(t) => [uniqueIndex('push_endpoint_idx').on(t.endpoint), index('push_user_idx').on(t.userId)]
+);
+
+/** Small key/value store for instance settings generated at runtime (e.g. VAPID keys). */
+export const appSetting = sqliteTable('app_setting', {
+	key: text('key').primaryKey(),
+	value: text('value').notNull()
+});

@@ -16,7 +16,9 @@ import {
 	timeFits,
 	type Link,
 	type Participant,
-	type Point
+	type Point,
+	type TravelTime,
+	straightLine
 } from './ride-matching.js';
 
 export type MatchNotice = {
@@ -43,7 +45,8 @@ export function rideMatchNotices(
 	participants: Participant[],
 	links: Link[],
 	eventPoint: Point,
-	directions: TravelDirection[]
+	directions: TravelDirection[],
+	travel: TravelTime = straightLine
 ): MatchNotice[] {
 	const out: MatchNotice[] = [];
 	for (const direction of directions) {
@@ -60,7 +63,7 @@ export function rideMatchNotices(
 			const points = searchPoints(s.legs[direction]);
 			for (const d of drivers) {
 				if (d.userId === s.userId) continue;
-				const match = bestMatch(d.legs[direction]!, points, eventPoint, direction);
+				const match = bestMatch(d.legs[direction]!, points, eventPoint, direction, travel);
 				if (!match || match.detourMin > GOOD_DETOUR_MIN || !timeFits(match)) continue;
 				out.push({
 					userId: s.userId,

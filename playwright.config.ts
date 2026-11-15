@@ -35,7 +35,8 @@ export default defineConfig({
 			SMTP_HOST: '',
 			// Mails are appended here so tests can read them; the notification job runs every second.
 			MAIL_OUTBOX: E2E_OUTBOX,
-			NOTIFY_INTERVAL: '1'
+			NOTIFY_INTERVAL: '1',
+			PUSH_OUTBOX: 'e2e/.tmp/push.jsonl'
 		}
 	}
 });

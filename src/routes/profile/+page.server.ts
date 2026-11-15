@@ -18,6 +18,7 @@ import {
 	updatePlace
 } from '#lib/server/profile.js';
 import { PREF_KINDS, setPreference } from '#lib/server/notifications.js';
+import { listDevices, removeSubscription } from '#lib/server/push.js';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ locals }) => {
@@ -26,13 +27,15 @@ export const load: PageServerLoad = ({ locals }) => {
 		.select({
 			confirmation: user.notifyConfirmation,
 			rides: user.notifyRides,
-			reminders: user.notifyReminders
+			reminders: user.notifyReminders,
+			mailWithPush: user.mailWithPush
 		})
 		.from(user)
 		.where(eq(user.id, me.id))
 		.get()!;
 	return {
 		prefs,
+		devices: listDevices(me.id).map(({ id, label }) => ({ id, label })),
 		profile: { name: me.name ?? '', email: me.email, hasPassword: me.hasPassword },
 		contacts: listContacts(me.id).map(({ id, kind, value }) => ({ id, kind, value })),
 		places: listPlaces(me.id).map(({ id, label, address, area, lat, lon }) => ({
@@ -95,7 +98,16 @@ export const actions: Actions = {
 	notifications: async ({ request, locals }) => {
 		const form = await request.formData();
 		for (const kind of PREF_KINDS) setPreference(locals.user!.id, kind, form.get(kind) === 'on');
+		db.update(user)
+			.set({ mailWithPush: form.get('mailWithPush') === 'on' })
+			.where(eq(user.id, locals.user!.id))
+			.run();
 		return { section: 'notifications', saved: true };
+	},
+
+	removeDevice: async ({ request, locals }) => {
+		removeSubscription(locals.user!.id, { id: String((await request.formData()).get('id')) });
+		return { section: 'push', saved: true };
 	},
 
 	removePassword: ({ locals }) => {

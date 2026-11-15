@@ -30,6 +30,27 @@ export const variables = defineEnvVars({
 		description: 'Testing only: append every mail as a JSON line to this file.',
 		schema: optional
 	},
+	VAPID_PUBLIC_KEY: {
+		description: 'Web push key pair (optional – generated and stored in the database otherwise).',
+		schema: optional
+	},
+	VAPID_PRIVATE_KEY: {
+		description: 'Web push private key (see VAPID_PUBLIC_KEY).',
+		schema: optional
+	},
+	VAPID_SUBJECT: {
+		description: 'Contact for push services, e.g. mailto:admin@toodle.lu (default: ORIGIN).',
+		schema: optional
+	},
+	PUSH_OUTBOX: {
+		description: 'Testing only: write push messages to this file instead of sending them.',
+		schema: optional
+	},
+	ROUTING_URL: {
+		description:
+			'Optional OSRM server for real driving times, e.g. http://osrm:5000 (default: straight-line estimate).',
+		schema: optional
+	},
 	MAIL_FROM: {
 		description: 'Sender address, e.g. "toodle <noreply@toodle.lu>".',
 		schema: optional

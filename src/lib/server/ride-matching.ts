@@ -58,15 +58,26 @@ export function distanceKm(a: Point, b: Point): number {
 export const driveMinutes = (km: number) => (km * ROAD_FACTOR * 60) / AVG_SPEED_KMH;
 
 /**
+ * Driving time in minutes between two points. Straight-line estimate by default; with a
+ * routing server configured (ROUTING_URL) real driving times are passed in instead.
+ */
+export type TravelTime = (a: Point, b: Point) => number;
+
+export const straightLine: TravelTime = (a, b) => driveMinutes(distanceKm(a, b));
+
+/**
  * Extra minutes for a driver going home ↔ event via `stop`. Symmetric, so it works for
  * both directions (to: home → stop → event, from: event → stop → home).
  */
-export function detourMinutes(driverPlace: Point, stop: Point, eventPoint: Point): number {
+export function detourMinutes(
+	driverPlace: Point,
+	stop: Point,
+	eventPoint: Point,
+	travel: TravelTime = straightLine
+): number {
 	const extra =
-		distanceKm(driverPlace, stop) +
-		distanceKm(stop, eventPoint) -
-		distanceKm(driverPlace, eventPoint);
-	return Math.max(0, driveMinutes(extra));
+		travel(driverPlace, stop) + travel(stop, eventPoint) - travel(driverPlace, eventPoint);
+	return Math.max(0, extra);
 }
 
 /* ------------------------------------------------------------------- roles */
@@ -116,19 +127,18 @@ export function bestMatch(
 	driverLeg: RideLeg,
 	points: SearchPoint[],
 	eventPoint: Point,
-	direction: TravelDirection
+	direction: TravelDirection,
+	travel: TravelTime = straightLine
 ): Match | null {
 	if (!hasPoint(driverLeg) || points.length === 0) return null;
 	const home: Point = { lat: driverLeg.lat, lon: driverLeg.lon };
 	let best: Match | null = null;
 	for (const via of points) {
-		const detourMin = detourMinutes(home, via, eventPoint);
+		const detourMin = detourMinutes(home, via, eventPoint, travel);
 		let timeGapMin: number | null = null;
 		if (driverLeg.time && via.time) {
 			// When would the driver be at this point? Pick-ups: on the way; otherwise compare departures.
-			const offset = via.isPickup
-				? driveMinutes(distanceKm(direction === 'to' ? home : eventPoint, via))
-				: 0;
+			const offset = via.isPickup ? travel(direction === 'to' ? home : eventPoint, via) : 0;
 			timeGapMin = Math.round((driverLeg.time.getTime() - via.time.getTime()) / 60000 + offset);
 		}
 		const score = detourMin + (timeGapMin === null ? 0 : Math.min(Math.abs(timeGapMin), 180) / 4);
@@ -192,7 +202,8 @@ export function buildDirectionView(
 	links: Link[],
 	viewerId: string | null,
 	direction: TravelDirection,
-	eventPoint: Point
+	eventPoint: Point,
+	travel: TravelTime = straightLine
 ): DirectionView {
 	const byId = new Map(participants.map((p) => [p.registrationId, p]));
 	const dirLinks = links.filter((l) => l.direction === direction);
@@ -222,7 +233,7 @@ export function buildDirectionView(
 					.map((l) => byId.get(l.passengerRegistrationId))
 					.filter((x): x is Participant => !!x)
 					.map(ref),
-				match: myPoints.length ? bestMatch(leg, myPoints, eventPoint, direction) : null
+				match: myPoints.length ? bestMatch(leg, myPoints, eventPoint, direction, travel) : null
 			};
 		})
 		.sort(
@@ -244,7 +255,8 @@ export function buildDirectionView(
 				...ref(p),
 				leg,
 				driver: driver ? ref(driver) : null,
-				match: role === 'driver' && myLeg ? bestMatch(myLeg, pts, eventPoint, direction) : null,
+				match:
+					role === 'driver' && myLeg ? bestMatch(myLeg, pts, eventPoint, direction, travel) : null,
 				distanceKm:
 					mine && pts.length ? Math.round(Math.min(...pts.map((x) => distanceKm(mine, x)))) : null
 			};
