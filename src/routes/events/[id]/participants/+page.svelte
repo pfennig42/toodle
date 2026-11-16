@@ -58,23 +58,6 @@
 					>· {m.participants_withdrawn_count({ count: withdrawnCount })}</span
 				>{/if}
 		</p>
-		<div class="actions">
-			<!-- eslint-disable svelte/no-navigation-without-resolve -- file download, not a page -->
-			<a
-				class="btn"
-				href={`${resolve('/events/[id]/participants.csv', { id: data.event.id })}`}
-				download>{m.participants_export()}</a
-			>
-			{#if withdrawnCount}
-				<a
-					class="btn"
-					href={`${resolve('/events/[id]/participants.csv', { id: data.event.id })}?all=1`}
-					download>{m.participants_export_all()}</a
-				>
-			{/if}
-			<!-- eslint-enable svelte/no-navigation-without-resolve -->
-		</div>
-		<p class="small muted">{m.participants_export_hint()}</p>
 	</section>
 
 	{#if data.participants.length}
@@ -92,13 +75,17 @@
 					<option value="oldest">{m.participants_sort_oldest()}</option>
 				</select>
 			</div>
-			<div class="segmented" role="group" aria-label={m.participants_filter()}>
-				{#each filters as f (f.value)}
-					<button type="button" aria-pressed={filter === f.value} onclick={() => (filter = f.value)}
-						>{f.label()}</button
-					>
-				{/each}
-			</div>
+			{#if withdrawnCount}
+				<div class="segmented" role="group" aria-label={m.participants_filter()}>
+					{#each filters as f (f.value)}
+						<button
+							type="button"
+							aria-pressed={filter === f.value}
+							onclick={() => (filter = f.value)}>{f.label()}</button
+						>
+					{/each}
+				</div>
+			{/if}
 
 			{#if form?.done}
 				<p class="small" role="status">
@@ -238,30 +225,62 @@
 				<p class="muted">{m.participants_none_found()}</p>
 			{/if}
 		</section>
+
+		<!-- export: needed now and then, so quiet and at the end -->
+		<section class="export stack-sm">
+			<h2 class="small-title">{m.participants_export_title()}</h2>
+			<div class="actions">
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- file download, not a page -->
+				<a
+					class="btn small"
+					href={`${resolve('/events/[id]/participants.csv', { id: data.event.id })}`}
+					download>{m.participants_export()}</a
+				>
+				{#if withdrawnCount}
+					<a
+						class="btn small"
+						href={`${resolve('/events/[id]/participants.csv', { id: data.event.id })}?all=1`}
+						download>{m.participants_export_all()}</a
+					>
+				{/if}
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			</div>
+			<p class="small muted">{m.participants_export_hint()}</p>
+		</section>
 	{:else}
-		<p class="card muted">{m.participants_empty()}</p>
+		<p class="empty muted">{m.participants_empty()}</p>
 	{/if}
 </div>
 
 <style>
 	.count {
 		margin: 0;
-		font-weight: 600;
+		font-size: 1.15rem;
+		font-weight: 700;
+	}
+
+	.export {
+		padding-top: var(--space-4);
+		border-top: 1px solid var(--border);
+	}
+
+	.small-title {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.empty {
+		margin: 0;
 	}
 
 	.toolbar {
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: 1fr auto;
 		gap: var(--space-2);
 	}
 
 	.toolbar input {
-		flex: 1 1 12rem;
 		min-width: 0;
-	}
-
-	.toolbar select {
-		flex: 0 1 auto;
 	}
 
 	.people {

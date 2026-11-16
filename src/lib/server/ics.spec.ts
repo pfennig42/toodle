@@ -20,6 +20,22 @@ describe('eventIcs', () => {
 		expect(ics.startsWith('BEGIN:VCALENDAR\r\n')).toBe(true);
 	});
 
+	it('writes whole-day entries without times', () => {
+		const allDay = eventIcs({
+			id: 'd',
+			title: 'Zeltlager',
+			startsAt: new Date('2027-07-15T22:00:00Z'), // 16.7. 00:00 Berlin
+			endsAt: new Date('2027-07-18T21:59:00Z'), // 18.7. 23:59 Berlin
+			location: '',
+			url: 'https://toodle.lu/e/x',
+			description: '',
+			allDay: true,
+			timezone: 'Europe/Berlin'
+		});
+		expect(allDay).toContain('DTSTART;VALUE=DATE:20270716\r\n');
+		expect(allDay).toContain('DTEND;VALUE=DATE:20270719\r\n');
+	});
+
 	it('folds long lines at 75 octets, also with umlauts', () => {
 		const long = eventIcs({
 			id: 'x',

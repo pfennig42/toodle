@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { tick } from 'svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { contactKindLabel } from '#lib/labels.js';
+	import { CONTACT_KINDS } from '#lib/contacts.js';
 	import AddressSearch from '#lib/components/AddressSearch.svelte';
 	import ContactKindSelect from '#lib/components/ContactKindSelect.svelte';
 	import PushSettings from '#lib/components/PushSettings.svelte';
@@ -16,6 +18,18 @@
 	};
 	let editing = $state<PlaceDraft | null>(null);
 	let contactValue = $state('');
+	let contactKind = $state('phone');
+	let addingContact = $state(false);
+	let contactInput: HTMLInputElement | undefined = $state();
+	// No contact yet: the form is open right away. Otherwise behind "add another".
+	const showContactForm = $derived(data.contacts.length === 0 || addingContact);
+
+	function openContactForm() {
+		// suggest a kind that isn't there yet
+		contactKind = CONTACT_KINDS.find((k) => !data.contacts.some((c) => c.kind === k)) ?? 'phone';
+		addingContact = true;
+		tick().then(() => contactInput?.focus());
+	}
 	// svelte-ignore state_referenced_locally
 	let name = $state(data.profile.name);
 	// svelte-ignore state_referenced_locally
@@ -79,20 +93,40 @@
 				{/each}
 			</ul>
 		{/if}
-		<form
-			method="post"
-			action="?/addContact"
-			class="row"
-			use:enhance={() =>
-				async ({ result, update }) => {
-					await update({ reset: false });
-					if (result.type === 'success') contactValue = '';
-				}}
-		>
-			<ContactKindSelect />
-			<input name="value" aria-label={m.contact_value()} bind:value={contactValue} required />
-			<button class="btn">{m.add()}</button>
-		</form>
+		{#if showContactForm}
+			<form
+				method="post"
+				action="?/addContact"
+				class="row"
+				use:enhance={() =>
+					async ({ result, update }) => {
+						await update({ reset: false });
+						if (result.type === 'success') {
+							contactValue = '';
+							addingContact = false;
+						}
+					}}
+			>
+				<ContactKindSelect bind:value={contactKind} />
+				<input
+					name="value"
+					aria-label={m.contact_value()}
+					bind:value={contactValue}
+					required
+					bind:this={contactInput}
+				/>
+				<button class="btn">{m.add()}</button>
+				{#if addingContact}
+					<button type="button" class="btn" onclick={() => (addingContact = false)}
+						>{m.cancel()}</button
+					>
+				{/if}
+			</form>
+		{:else if data.contacts.length < data.maxContacts}
+			<button type="button" class="btn" onclick={openContactForm}
+				>+ {m.profile_contacts_add()}</button
+			>
+		{/if}
 		{#if error('contact')}<p class="error">{error('contact')}</p>{/if}
 	</section>
 

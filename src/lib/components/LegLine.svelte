@@ -25,7 +25,7 @@
 
 <span class="leg-line">
 	<span aria-hidden="true">{MODE_ICON[leg.mode]}</span>
-	{#if leg.mode === 'transit' && leg.pickups.length}
+	{#if leg.pickups.length}
 		{direction === 'to' ? m.summary_pickup_to() : m.summary_pickup_from()}
 		{#each leg.pickups as p, i (i)}
 			{#if i > 0}&nbsp;{m.summary_or()}&nbsp;{/if}<span class="nowrap"

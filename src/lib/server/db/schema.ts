@@ -124,6 +124,13 @@ export const event = sqliteTable(
 		endsAt: integer('ends_at', { mode: 'timestamp' }).notNull(),
 		timezone: text('timezone').notNull().default('Europe/Berlin'),
 		registrationDeadline: integer('registration_deadline', { mode: 'timestamp' }),
+		/**
+		 * Whether a time of day was given. Without one, start is the beginning of the day and
+		 * end/deadline the end of the day – and only the date is shown.
+		 */
+		startHasTime: integer('start_has_time', { mode: 'boolean' }).notNull().default(true),
+		endHasTime: integer('end_has_time', { mode: 'boolean' }).notNull().default(true),
+		deadlineHasTime: integer('deadline_has_time', { mode: 'boolean' }).notNull().default(true),
 		/** Manually closed by the organizers, independent of the deadline */
 		registrationClosed: integer('registration_closed', { mode: 'boolean' })
 			.notNull()
@@ -243,6 +250,8 @@ export const travelLeg = sqliteTable(
 			.references(() => registration.id, { onDelete: 'cascade' }),
 		direction: text('direction', { enum: TRAVEL_DIRECTIONS }).notNull(),
 		time: integer('time', { mode: 'timestamp' }),
+		/** false: only the day is known (stored as noon) – no time-of-day comparisons */
+		hasClock: integer('has_clock', { mode: 'boolean' }).notNull().default(true),
 		mode: text('mode', { enum: TRAVEL_MODES }).notNull(),
 		placeLabel: text('place_label'),
 		placeAddress: text('place_address'),

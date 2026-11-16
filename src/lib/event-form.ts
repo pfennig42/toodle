@@ -1,14 +1,19 @@
-import { utcToZoned, DEFAULT_TIMEZONE } from './datetime.js';
+import { splitLocal, utcToZoned, DEFAULT_TIMEZONE } from './datetime.js';
 
 export type EventFormValues = {
 	title: string;
 	description: string;
 	locationName: string;
 	location: { address: string; area: string; lat: number; lon: number } | null;
-	startsAt: string;
-	endsAt: string;
+	/** "2027-07-16" */
+	startDate: string;
+	/** "18:00" or "" (no time) */
+	startTime: string;
+	endDate: string;
+	endTime: string;
 	timezone: string;
-	registrationDeadline: string;
+	deadlineDate: string;
+	deadlineTime: string;
 	capacity: string;
 };
 
@@ -25,6 +30,15 @@ type EventLike = {
 	timezone: string;
 	registrationDeadline: Date | null;
 	capacity: number | null;
+	startHasTime: boolean;
+	endHasTime: boolean;
+	deadlineHasTime: boolean;
+};
+
+const parts = (d: Date | null, tz: string, hasTime: boolean) => {
+	if (!d) return ['', ''] as const;
+	const [date, time] = splitLocal(utcToZoned(d, tz));
+	return [date, hasTime ? time : ''] as const;
 };
 
 export function formValuesFromEvent(e: EventLike): EventFormValues {
@@ -36,12 +50,14 @@ export function formValuesFromEvent(e: EventLike): EventFormValues {
 			e.locationAddress && e.locationArea && e.lat !== null && e.lon !== null
 				? { address: e.locationAddress, area: e.locationArea, lat: e.lat, lon: e.lon }
 				: null,
-		startsAt: utcToZoned(e.startsAt, e.timezone),
-		endsAt: utcToZoned(e.endsAt, e.timezone),
+		...(([startDate, startTime]) => ({ startDate, startTime }))(
+			parts(e.startsAt, e.timezone, e.startHasTime)
+		),
+		...(([endDate, endTime]) => ({ endDate, endTime }))(parts(e.endsAt, e.timezone, e.endHasTime)),
+		...(([deadlineDate, deadlineTime]) => ({ deadlineDate, deadlineTime }))(
+			parts(e.registrationDeadline, e.timezone, e.deadlineHasTime)
+		),
 		timezone: e.timezone,
-		registrationDeadline: e.registrationDeadline
-			? utcToZoned(e.registrationDeadline, e.timezone)
-			: '',
 		capacity: e.capacity?.toString() ?? ''
 	};
 }
@@ -59,10 +75,13 @@ export function formValuesFromForm(form: FormData): EventFormValues {
 			s('address') && Number.isFinite(lat) && Number.isFinite(lon)
 				? { address: s('address'), area: s('area'), lat, lon }
 				: null,
-		startsAt: s('startsAt'),
-		endsAt: s('endsAt'),
+		startDate: s('startDate'),
+		startTime: s('startTime'),
+		endDate: s('endDate'),
+		endTime: s('endTime'),
 		timezone: s('timezone') || DEFAULT_TIMEZONE,
-		registrationDeadline: s('registrationDeadline'),
+		deadlineDate: s('deadlineDate'),
+		deadlineTime: s('deadlineTime'),
 		capacity: s('capacity')
 	};
 }
@@ -72,9 +91,12 @@ export const emptyFormValues = (): EventFormValues => ({
 	description: '',
 	locationName: '',
 	location: null,
-	startsAt: '',
-	endsAt: '',
+	startDate: '',
+	startTime: '',
+	endDate: '',
+	endTime: '',
 	timezone: DEFAULT_TIMEZONE,
-	registrationDeadline: '',
+	deadlineDate: '',
+	deadlineTime: '',
 	capacity: ''
 });

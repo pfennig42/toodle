@@ -20,7 +20,14 @@ export type PlaceChoice =
 	| { kind: 'saved'; id: string }
 	| { kind: 'custom'; label: string; point: GeoPoint | null; save: boolean };
 
-export type PickupInput = { point: GeoPoint | null; time: string };
+/**
+ * Where someone can be picked up (arrival) or dropped off (departure): a saved place
+ * ("Zuhause") or any address/station from the search. `time`: "2027-07-16T16:40" or "".
+ */
+export type PickupInput = { point: GeoPoint | null; savedId?: string; time: string };
+
+/** Modes offered in the form. "transit" is only kept for older registrations. */
+export const FORM_MODES = ['car', 'seeking', 'undecided'] as const;
 
 export type LegInput = {
 	mode: TravelMode | null;

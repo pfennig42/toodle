@@ -57,44 +57,79 @@ export function utcToZoned(date: Date, tz: string): string {
 	return local.toISOString().slice(0, 16);
 }
 
-/** Human readable date range, e.g. "Fr., 16. Juli 2027, 18:00 – So., 18. Juli, 14:00". */
-export function formatRange(start: Date, end: Date, tz: string, locale: string): string {
+/** Which parts of an event's dates carry a time of day (see event.startHasTime etc.). */
+export type TimeFlags = { startHasTime?: boolean; endHasTime?: boolean };
+
+/**
+ * Human readable date range, e.g. "Fr., 16. Juli 2027, 18:00 – So., 18. Juli, 14:00" or,
+ * without times, "Fr., 16. – So., 18. Juli 2027" / "Sa., 1. Mai 2027".
+ */
+export function formatRange(
+	start: Date,
+	end: Date,
+	tz: string,
+	locale: string,
+	{ startHasTime = true, endHasTime = true }: TimeFlags = {}
+): string {
 	const sameDay = utcToZoned(start, tz).slice(0, 10) === utcToZoned(end, tz).slice(0, 10);
-	const full = new Intl.DateTimeFormat(locale, {
+	const time = { hour: '2-digit', minute: '2-digit' } as const;
+	const day = { weekday: 'short', day: 'numeric', month: 'long' } as const;
+
+	if (!startHasTime && !endHasTime) {
+		const f = new Intl.DateTimeFormat(locale, { timeZone: tz, ...day, year: 'numeric' });
+		// formatRange shares month/year where possible ("16. – 18. Juli 2027")
+		return sameDay ? f.format(start) : f.formatRange(start, end);
+	}
+	const startFmt = new Intl.DateTimeFormat(locale, {
 		timeZone: tz,
-		weekday: 'short',
-		day: 'numeric',
-		month: 'long',
+		...day,
 		year: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit'
+		...(startHasTime ? time : {})
 	});
-	const endFmt = new Intl.DateTimeFormat(
-		locale,
-		sameDay
-			? { timeZone: tz, hour: '2-digit', minute: '2-digit' }
-			: {
-					timeZone: tz,
-					weekday: 'short',
-					day: 'numeric',
-					month: 'long',
-					hour: '2-digit',
-					minute: '2-digit'
-				}
-	);
-	return `${full.format(start)} – ${endFmt.format(end)}`;
+	if (sameDay) {
+		return endHasTime
+			? `${startFmt.format(start)} – ${new Intl.DateTimeFormat(locale, { timeZone: tz, ...time }).format(end)}`
+			: startFmt.format(start);
+	}
+	const endFmt = new Intl.DateTimeFormat(locale, {
+		timeZone: tz,
+		...day,
+		...(endHasTime ? time : {})
+	});
+	return `${startFmt.format(start)} – ${endFmt.format(end)}`;
 }
 
-export function formatDateTime(date: Date, tz: string, locale: string): string {
+export function formatDateTime(date: Date, tz: string, locale: string, withTime = true): string {
 	return new Intl.DateTimeFormat(locale, {
 		timeZone: tz,
 		weekday: 'short',
 		day: 'numeric',
 		month: 'long',
 		year: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit'
+		...(withTime ? { hour: '2-digit', minute: '2-digit' } : {})
 	}).format(date);
+}
+
+/** "2027-07-16T18:30" → ["2027-07-16", "18:30"] */
+export function splitLocal(local: string): [string, string] {
+	return [local.slice(0, 10), local.slice(11, 16)];
+}
+
+/**
+ * Date + optional time (wall clock in `tz`) → instant. Without a time, `fallback` is used –
+ * "00:00" for starts, "23:59" for ends and deadlines.
+ */
+export function zonedDateTime(
+	date: string,
+	time: string,
+	tz: string,
+	fallback: '00:00' | '23:59'
+): { at: Date; hasTime: boolean } | null {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+	const hasTime = /^\d{2}:\d{2}$/.test(time);
+	if (time && !hasTime) return null;
+	const at = zonedToUtc(`${date}T${hasTime ? time : fallback}`, tz);
+	return at ? { at, hasTime } : null;
 }
 
 /** Time zones offered in the event form – Europe first (toodle's focus), current value always included. */

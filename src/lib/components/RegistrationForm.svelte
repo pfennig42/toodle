@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ContactKindSelect from './ContactKindSelect.svelte';
+	import AccountFields from './AccountFields.svelte';
 	import { enhance } from '$app/forms';
 	import { m } from '#lib/paraglide/messages.js';
 	import type { FieldConfig, FieldType, TravelDirection } from '#lib/forms.js';
@@ -26,6 +28,8 @@
 		isUpdate,
 		answerErrors = {},
 		travelErrors = {},
+		askContact = false,
+		contactError = false,
 		oncancel
 	}: {
 		fields: Field[];
@@ -38,14 +42,48 @@
 		isUpdate: boolean;
 		answerErrors?: Record<string, string>;
 		travelErrors?: Partial<Record<TravelDirection, string>>;
+		/** No contact option yet and the event has rides: ask here, where it matters. */
+		askContact?: boolean;
+		contactError?: boolean;
 		oncancel?: () => void;
 	} = $props();
 
 	// svelte-ignore state_referenced_locally
 	let travel = $state(structuredClone(travelInput));
+
+	/**
+	 * The return trip follows the arrival – same way of travelling, same place, same pick-up
+	 * points (times cleared, the day stays the last day) – until the person changes it. Changed
+	 * means: it no longer equals what we filled in last time. Existing registrations keep theirs.
+	 */
+	// svelte-ignore state_referenced_locally
+	const departureTime = travelInput.from?.time ?? '';
+	// svelte-ignore state_referenced_locally
+	let lastMirrored = isUpdate ? null : JSON.stringify(travel.from ?? null);
+	$effect(() => {
+		const to = travel.to;
+		const from = travel.from;
+		if (!to || !from || lastMirrored === null) return;
+		const current = JSON.stringify(from);
+		if (current !== lastMirrored) {
+			lastMirrored = null; // changed by hand – from now on it's independent
+			return;
+		}
+		const snapshot = $state.snapshot(to);
+		const next = {
+			...snapshot,
+			time: departureTime,
+			pickups: snapshot.pickups.map((p) => ({ ...p, time: '' }))
+		};
+		const nextJson = JSON.stringify(next);
+		if (nextJson === current) return;
+		lastMirrored = nextJson;
+		travel.from = next;
+	});
 	// svelte-ignore state_referenced_locally
 	let commentText = $state(comment);
 	let pending = $state(false);
+	let contactValue = $state('');
 
 	const travelField = $derived(fields.find((f) => f.type === 'travel'));
 	const directions = $derived(travelField?.config.directions ?? []);
@@ -68,6 +106,7 @@
 	}}
 >
 	<input type="hidden" name="travel" value={serialized} />
+	<AccountFields />
 
 	{#each fields as field (field.id)}
 		{#if field.type === 'travel'}
@@ -97,6 +136,16 @@
 		{/if}
 	{/each}
 
+	{#if askContact && travelField}
+		<fieldset class="contact">
+			<legend>{m.registration_contact_title()} <span class="muted">({m.optional()})</span></legend>
+			<div class="row">
+				<ContactKindSelect />
+				<input name="value" aria-label={m.contact_value()} bind:value={contactValue} />
+			</div>
+			{#if contactError}<p class="error small">{m.error_contact()}</p>{/if}
+		</fieldset>
+	{/if}
 	{#if answersLocked}
 		<p class="muted small">{m.registration_answers_locked()}</p>
 	{/if}
@@ -135,5 +184,17 @@
 
 	.travel p {
 		margin: 0;
+	}
+
+	.contact {
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+
+	.contact legend {
+		padding: 0;
+		margin-bottom: var(--space-2);
+		font-weight: 600;
 	}
 </style>

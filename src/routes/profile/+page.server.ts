@@ -12,6 +12,7 @@ import {
 	deletePlace,
 	listContacts,
 	listPlaces,
+	MAX_CONTACTS,
 	parseContact,
 	parseName,
 	parsePlace,
@@ -38,6 +39,7 @@ export const load: PageServerLoad = ({ locals }) => {
 		devices: listDevices(me.id).map(({ id, label }) => ({ id, label })),
 		profile: { name: me.name ?? '', email: me.email, hasPassword: me.hasPassword },
 		contacts: listContacts(me.id).map(({ id, kind, value }) => ({ id, kind, value })),
+		maxContacts: MAX_CONTACTS,
 		places: listPlaces(me.id).map(({ id, label, address, area, lat, lon }) => ({
 			id,
 			label,

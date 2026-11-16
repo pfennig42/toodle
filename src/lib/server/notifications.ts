@@ -205,7 +205,7 @@ export async function sendConfirmation(eventId: string, userId: string) {
 					paragraphs: [
 						m.mail_hello({ name: displayName(u) }),
 						m.mail_confirm_intro({ title: e.title }),
-						[formatRange(e.startsAt, e.endsAt, e.timezone, locale), where]
+						[formatRange(e.startsAt, e.endsAt, e.timezone, locale, e), where]
 							.filter(Boolean)
 							.join(' · ')
 					],
@@ -232,7 +232,9 @@ export async function sendConfirmation(eventId: string, userId: string) {
 							endsAt: e.endsAt,
 							location: [e.locationName, e.locationAddress].filter(Boolean).join(', '),
 							url: eventUrl(e),
-							description: ''
+							description: '',
+							allDay: !e.startHasTime && !e.endHasTime,
+							timezone: e.timezone
 						})
 					}
 				]

@@ -1,4 +1,4 @@
-import { isValidTimeZone, zonedToUtc } from '../datetime.js';
+import { isValidTimeZone, zonedDateTime } from '../datetime.js';
 import type { Event } from './db/schema.js';
 
 /* ------------------------------------------------------------------ details */
@@ -16,6 +16,9 @@ export type EventDetails = {
 	timezone: string;
 	registrationDeadline: Date | null;
 	capacity: number | null;
+	startHasTime: boolean;
+	endHasTime: boolean;
+	deadlineHasTime: boolean;
 };
 
 export type DetailsError =
@@ -32,7 +35,8 @@ export type DetailsError =
 const str = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 
 export function parseEventDetails(
-	form: FormData
+	form: FormData,
+	{ requireLocation = false }: { requireLocation?: boolean } = {}
 ): { ok: true; details: EventDetails } | { ok: false; errors: DetailsError[] } {
 	const errors: DetailsError[] = [];
 	const title = str(form, 'title');
@@ -61,16 +65,25 @@ export function parseEventDetails(
 		else location = { address, area, lat, lon };
 	}
 
+	// Creating an event publishes it at the end – that needs the address (ride view).
+	if (requireLocation && !address && !errors.includes('location')) errors.push('location');
+
 	const tz = isValidTimeZone(timezone) ? timezone : 'Europe/Berlin';
-	const startsAt = zonedToUtc(str(form, 'startsAt'), tz);
-	const endsAt = zonedToUtc(str(form, 'endsAt'), tz);
+	// Times are optional: no time = whole day (start 00:00, end and deadline 23:59).
+	const start = zonedDateTime(str(form, 'startDate'), str(form, 'startTime'), tz, '00:00');
+	const end = zonedDateTime(str(form, 'endDate'), str(form, 'endTime'), tz, '23:59');
+	const startsAt = start?.at ?? null;
+	const endsAt = end?.at ?? null;
 	if (!startsAt) errors.push('start');
 	if (!endsAt) errors.push('end');
 	if (startsAt && endsAt && endsAt <= startsAt) errors.push('end_before_start');
 
-	const deadlineRaw = str(form, 'registrationDeadline');
-	const registrationDeadline = deadlineRaw ? zonedToUtc(deadlineRaw, tz) : null;
-	if (deadlineRaw && (!registrationDeadline || (endsAt && registrationDeadline > endsAt)))
+	const deadlineDate = str(form, 'deadlineDate');
+	const deadline = deadlineDate
+		? zonedDateTime(deadlineDate, str(form, 'deadlineTime'), tz, '23:59')
+		: null;
+	const registrationDeadline = deadline?.at ?? null;
+	if (deadlineDate && (!registrationDeadline || (endsAt && registrationDeadline > endsAt)))
 		errors.push('deadline');
 
 	const capacityRaw = str(form, 'capacity');
@@ -93,7 +106,10 @@ export function parseEventDetails(
 			endsAt: endsAt!,
 			timezone: tz,
 			registrationDeadline,
-			capacity
+			capacity,
+			startHasTime: start!.hasTime,
+			endHasTime: end!.hasTime,
+			deadlineHasTime: deadline?.hasTime ?? true
 		}
 	};
 }

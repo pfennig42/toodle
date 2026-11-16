@@ -73,6 +73,12 @@ Der Name und die E-Mail kommen immer aus dem Account und sind keine Formularfeld
 
 ### 4.4 Feldtyp „Reise“
 
+> **Stand (nach Nutzertests):** Im Formular gibt es nur noch 🚗 Auto · 🙋 Suche Mitfahrt · Keine Angabe.
+> „ÖV“ ist in „Suche Mitfahrt“ aufgegangen: Wer mitfahren will, nennt einen oder mehrere Abholorte (zu Hause, Bahnhof …,
+> Uhrzeit optional). Beim Auto kommt zuerst „Nimmst du Leute mit?“ – Ort und Zeit nur, wenn ja. Der Tag ist aus der
+> Veranstaltung vorbelegt, die Uhrzeit optional. Die Abreise übernimmt die Anreise, bis man sie ändert. Ältere
+> ÖV-Angaben werden weiter angezeigt und abgeglichen.
+
 Erfasst Hin- und Rückfahrt getrennt. Pro Richtung:
 
 | Angabe        | Beispiel                                            |

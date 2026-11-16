@@ -108,6 +108,7 @@ export function saveRegistration(input: {
 					direction: leg.direction,
 					mode: leg.mode,
 					time: leg.time,
+					hasClock: leg.hasClock,
 					placeLabel: leg.place?.label ?? null,
 					placeAddress: leg.place?.address ?? null,
 					placeArea: leg.place?.area ?? null,

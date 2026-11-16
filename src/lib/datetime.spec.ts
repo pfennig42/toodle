@@ -56,4 +56,21 @@ describe('formatRange', () => {
 		);
 		expect(weekend).toContain('18. Juli');
 	});
+
+	it('leaves out times that were not given', () => {
+		const tz = 'Europe/Berlin';
+		const start = zonedToUtc('2027-07-16T00:00', tz)!;
+		const end = zonedToUtc('2027-07-18T23:59', tz)!;
+		const noTimes = { startHasTime: false, endHasTime: false };
+		// Intl uses thin spaces around the dash
+		const plain = (x: string) => x.replace(/\s/g, ' ');
+		expect(plain(formatRange(start, end, tz, 'de', noTimes))).toBe('Fr., 16. – So., 18. Juli 2027');
+		expect(formatRange(start, zonedToUtc('2027-07-16T23:59', tz)!, tz, 'de', noTimes)).toBe(
+			'Fr., 16. Juli 2027'
+		);
+		const startOnly = formatRange(zonedToUtc('2027-07-16T18:00', tz)!, end, tz, 'de', {
+			endHasTime: false
+		});
+		expect(startOnly).toMatch(/16\. Juli 2027.*18:00 – So\., 18\. Juli$/);
+	});
 });

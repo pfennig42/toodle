@@ -27,6 +27,15 @@
 
 	let online = $state(true);
 
+	// "You're logged in" – shown once after the login link, fades out by itself
+	let flash = $state<string | null>(null);
+	$effect(() => {
+		if (data.flash !== 'login' || !data.user) return;
+		flash = m.login_flash({ name: data.user.name ?? '' });
+		const t = setTimeout(() => (flash = null), 5000);
+		return () => clearTimeout(t);
+	});
+
 	// Logged out (also when a session expired): drop the offline copy of the previous user's pages.
 	$effect(() => {
 		if (!data.user) navigator.serviceWorker?.controller?.postMessage('clear-pages');
@@ -44,7 +53,7 @@
 	<header>
 		<a class="brand" href={resolve('/')}>
 			<img src={asset('icons/favicon.svg')} alt="" width="32" height="32" />
-			<span>{m.app_name()}</span>
+			<span class="wordmark">toodle<span class="dot">.</span><span class="tld">lu</span></span>
 		</a>
 
 		<div class="tools">
@@ -88,11 +97,27 @@
 		<p class="offline" role="status">{m.offline_banner()}</p>
 	{/if}
 
+	{#if flash}
+		<p class="flash" role="status">
+			<span>✓ {flash}</span>
+			<button type="button" class="close" aria-label={m.close()} onclick={() => (flash = null)}
+				>✕</button
+			>
+		</p>
+	{/if}
+
 	<main>
 		{@render children()}
 	</main>
 
-	<footer class="muted">{m.footer_note()}</footer>
+	<footer>
+		<p class="tagline">{m.tagline()}</p>
+		<p class="muted">
+			<a href={resolve('/about')}>{m.footer_about()}</a>
+			·
+			<a href="https://pfennig.tech" rel="noopener">{m.footer_by()}</a>
+		</p>
+	</footer>
 </div>
 
 {#if data.user}
@@ -135,6 +160,14 @@
 		font-size: 1.2rem;
 		color: var(--text);
 		text-decoration: none;
+	}
+
+	.wordmark .dot {
+		color: var(--cta);
+	}
+
+	.wordmark .tld {
+		font-weight: 400;
 	}
 
 	.tools {
@@ -182,6 +215,35 @@
 		font-size: 0.9rem;
 	}
 
+	.flash {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-2);
+		margin: 0 0 var(--space-3);
+		padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+		border-radius: var(--radius);
+		background: var(--accent-soft);
+		font-weight: 500;
+		animation: flash-in 0.25s ease-out;
+	}
+
+	.flash .close {
+		min-width: var(--touch);
+		min-height: var(--touch);
+		border: 0;
+		background: none;
+		color: inherit;
+		cursor: pointer;
+	}
+
+	@keyframes flash-in {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+	}
+
 	.settings {
 		/* Popover: top layer, light dismiss. Placed below the header, right aligned. */
 		position: fixed;
@@ -215,9 +277,21 @@
 	}
 
 	footer {
+		display: grid;
+		gap: var(--space-1);
 		padding-block: var(--space-6);
 		font-size: 0.85rem;
 		text-align: center;
+	}
+
+	footer p {
+		margin: 0;
+	}
+
+	.tagline {
+		color: var(--accent);
+		font-weight: 600;
+		font-size: 0.95rem;
 	}
 
 	.bottom-nav {
@@ -242,6 +316,8 @@
 			padding-bottom: env(safe-area-inset-bottom, 0);
 			background: var(--surface);
 			border-top: 1px solid var(--border);
+			/* comes back a moment after typing ends – see below */
+			transition: visibility 0s linear 0.4s;
 		}
 
 		.bottom-nav a {
@@ -262,9 +338,22 @@
 			font-weight: 600;
 		}
 
-		/* While typing, the on-screen keyboard needs the space. */
-		:global(:root:has(input:focus, select:focus, textarea:focus)) .bottom-nav {
-			display: none;
+		/*
+		 * While typing, the on-screen keyboard needs the space: hide at once. Show again only
+		 * after a short delay – otherwise the nav pops up under the finger when a tap on a
+		 * button near the bottom moves the focus away, and the tap hits the nav instead.
+		 * Checkboxes and switches don't open a keyboard, so they don't count.
+		 */
+		:global(
+				:root:has(
+					input:not([type='checkbox'], [type='radio'], [type='button'], [type='submit']):focus,
+					select:focus,
+					textarea:focus
+				)
+			)
+			.bottom-nav {
+			visibility: hidden;
+			transition-delay: 0s;
 		}
 	}
 </style>

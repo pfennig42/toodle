@@ -182,11 +182,11 @@ describe('summarizeFields', () => {
 });
 
 describe('modeCounts', () => {
-	it('counts people without travel info as none', () => {
+	it('counts people without travel info as not specified', () => {
 		const c = modeCounts(
 			[person('a', { to: leg() }), person('b', { to: leg({ mode: 'transit' }) }), person('c')],
 			'to'
 		);
-		expect(c).toEqual({ car: 1, transit: 1, seeking: 0, undecided: 0, none: 1 });
+		expect(c).toEqual({ car: 1, transit: 1, seeking: 0, undecided: 1, none: 0 });
 	});
 });

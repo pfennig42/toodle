@@ -10,8 +10,10 @@ function formData(values: Record<string, string>) {
 
 const base = {
 	title: 'Sommerfreizeit',
-	startsAt: '2027-07-16T18:00',
-	endsAt: '2027-07-18T14:00',
+	startDate: '2027-07-16',
+	startTime: '18:00',
+	endDate: '2027-07-18',
+	endTime: '14:00',
 	timezone: 'Europe/Berlin'
 };
 
@@ -21,6 +23,7 @@ describe('parseEventDetails', () => {
 		expect(r.ok).toBe(true);
 		if (!r.ok) return;
 		expect(r.details.startsAt.toISOString()).toBe('2027-07-16T16:00:00.000Z');
+		expect(r.details).toMatchObject({ startHasTime: true, endHasTime: true });
 		expect(r.details.lat).toBeNull();
 		expect(r.details.capacity).toBeNull();
 	});
@@ -40,13 +43,62 @@ describe('parseEventDetails', () => {
 		expect(broken).toEqual({ ok: false, errors: ['location'] });
 	});
 
+	it('treats missing times as whole days', () => {
+		const r = parseEventDetails(
+			formData({
+				title: 'Zeltlager',
+				startDate: '2027-07-16',
+				endDate: '2027-07-18',
+				deadlineDate: '2027-07-01',
+				timezone: 'Europe/Berlin'
+			})
+		);
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		// local midnight / 23:59 in summer time (UTC+2)
+		expect(r.details.startsAt.toISOString()).toBe('2027-07-15T22:00:00.000Z');
+		expect(r.details.endsAt.toISOString()).toBe('2027-07-18T21:59:00.000Z');
+		expect(r.details.registrationDeadline!.toISOString()).toBe('2027-07-01T21:59:00.000Z');
+		expect(r.details).toMatchObject({
+			startHasTime: false,
+			endHasTime: false,
+			deadlineHasTime: false
+		});
+
+		// a one-day event without times is fine
+		const oneDay = parseEventDetails(
+			formData({ title: 'Ausflug', startDate: '2027-05-01', endDate: '2027-05-01' })
+		);
+		expect(oneDay.ok).toBe(true);
+		// mixed: start with time, end without
+		const mixed = parseEventDetails(formData({ ...base, endTime: '' }));
+		expect(mixed.ok && mixed.details).toMatchObject({ startHasTime: true, endHasTime: false });
+	});
+
+	it('requires the address when creating', () => {
+		expect(parseEventDetails(formData(base), { requireLocation: true })).toEqual({
+			ok: false,
+			errors: ['location']
+		});
+		const withAddress = parseEventDetails(
+			formData({ ...base, address: 'Am Wald 3', area: 'Waldheim', lat: '50.9', lon: '8.1' }),
+			{ requireLocation: true }
+		);
+		expect(withAddress.ok).toBe(true);
+	});
+
+	it('rejects malformed dates and times', () => {
+		const r = parseEventDetails(formData({ ...base, startTime: '25h', endDate: '18.07.2027' }));
+		expect(r).toEqual({ ok: false, errors: ['start', 'end'] });
+	});
+
 	it('collects all errors', () => {
 		const r = parseEventDetails(
 			formData({
 				title: '',
-				startsAt: '2027-07-18T18:00',
-				endsAt: '2027-07-16T14:00',
-				registrationDeadline: '2027-08-01T00:00',
+				startDate: '2027-07-18',
+				endDate: '2027-07-16',
+				deadlineDate: '2027-08-01',
 				capacity: '0'
 			})
 		);

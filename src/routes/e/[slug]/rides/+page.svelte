@@ -2,7 +2,6 @@
 	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { m } from '#lib/paraglide/messages.js';
-	import { CAR_STATUSES } from '#lib/registration.js';
 	import { carStatusLabel } from '#lib/travel-summary.js';
 	import ContactButtons from '#lib/components/ContactButtons.svelte';
 	import LegLine from '#lib/components/LegLine.svelte';
@@ -88,8 +87,6 @@
 		</nav>
 	{/if}
 
-	<p class="muted small privacy">{m.rides_privacy()}</p>
-
 	<!-- My own trip -->
 	{#if data.registered}
 		<section class="card stack mine">
@@ -103,8 +100,11 @@
 			{#if v.role === 'driver' && v.myLeg}
 				<form method="post" action="?/carStatus" use:enhance class="segmented status-switch">
 					<input type="hidden" name="direction" value={dir} />
-					{#each CAR_STATUSES as s (s)}
-						<button name="status" value={s} aria-pressed={v.myLeg.carStatus === s}
+					{#each ['offering', 'full'] as const as s (s)}
+						<button
+							name="status"
+							value={s}
+							aria-pressed={(v.myLeg.carStatus === 'offering') === (s === 'offering')}
 							>{carStatusLabel(s)}</button
 						>
 					{/each}
@@ -268,6 +268,8 @@
 			</details>
 		{/if}
 	{/if}
+
+	<p class="muted small privacy">{m.rides_privacy()}</p>
 {/if}
 
 <style>
@@ -313,7 +315,7 @@
 	}
 
 	.privacy {
-		margin-bottom: var(--space-4);
+		margin-top: var(--space-6);
 	}
 
 	section + section,

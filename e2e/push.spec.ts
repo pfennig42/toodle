@@ -51,7 +51,7 @@ test('devices get push instead of mail; devices can be removed', async ({
 	expect(ok.status()).toBe(200);
 	const testPush = await leaCtx.request.post('/api/push/test', { data: {} });
 	expect((await testPush.json()).delivered).toBe(1);
-	expect(pushOutbox(lea.userId).map((p) => p.title)).toContain('toodle – Test');
+	expect(pushOutbox(lea.userId).map((p) => p.title)).toContain('toodle Test');
 
 	// organizer links Lea to Anna → Lea: push only, Anna (no device): mail
 	const slug = createEvent(olga.userId, {
@@ -66,15 +66,15 @@ test('devices get push instead of mail; devices can be removed', async ({
 
 	await expect
 		.poll(() => pushOutbox(lea.userId).map((p) => p.title))
-		.toContain('Du fährst bei Anna mit – Herbstfahrt');
-	const push = pushOutbox(lea.userId).find((p) => p.title.startsWith('Du fährst'))!;
+		.toContain('Herbstfahrt: Du fährst bei Anna mit');
+	const push = pushOutbox(lea.userId).find((p) => p.title.includes('Du fährst'))!;
 	expect(push.url).toBe(`/e/${slug}/rides?dir=to`);
 	expect(push.body).toContain('Eingetragen von Olga Orga.');
 	await expect
 		.poll(() => outbox(anna.email).map((m) => m.subject))
-		.toContain('Lea fährt bei dir mit – Herbstfahrt');
+		.toContain('Herbstfahrt: Lea fährt bei dir mit');
 	expect(outbox(lea.email).map((m) => m.subject)).not.toContain(
-		'Du fährst bei Anna mit – Herbstfahrt'
+		'Herbstfahrt: Du fährst bei Anna mit'
 	);
 
 	// the device shows up in the profile and can be removed there

@@ -98,7 +98,10 @@ export function duplicateEvent(source: Event, userId: string, titleSuffix: strin
 			endsAt: source.endsAt,
 			timezone: source.timezone,
 			registrationDeadline: source.registrationDeadline,
-			capacity: source.capacity
+			capacity: source.capacity,
+			startHasTime: source.startHasTime,
+			endHasTime: source.endHasTime,
+			deadlineHasTime: source.deadlineHasTime
 		},
 		fields
 	);

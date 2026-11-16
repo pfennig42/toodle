@@ -1,18 +1,18 @@
 import { fail, redirect } from '@sveltejs/kit';
 import QRCode from 'qrcode';
-import { m } from '#lib/paraglide/messages.js';
+import type { TravelDirection } from '#lib/forms.js';
 import {
-	deleteEvent,
-	duplicateEvent,
 	getEventForOrganizer,
 	listFields,
 	publishBlockers,
-	setEventStatus,
-	setRegistrationClosed
+	setEventStatus
 } from '#lib/server/events.js';
 import { countActiveRegistrations } from '#lib/server/registrations.js';
+import { isSeeker } from '#lib/server/ride-matching.js';
+import { loadRideData } from '#lib/server/rides.js';
 import type { Actions, PageServerLoad } from './$types';
 
+/** The event at a glance: success after publishing, sharing, a few numbers. Settings live elsewhere. */
 export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
 	const { event: summary } = await parent();
 	const e = getEventForOrganizer(params.id, locals.user!.id)!;
@@ -21,65 +21,49 @@ export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
 		margin: 1,
 		errorCorrectionLevel: 'M'
 	});
+
+	// people still looking for a ride (any direction), for the "rides" number
+	const directions: TravelDirection[] =
+		listFields(e.id).find((f) => f.type === 'travel')?.config.directions ?? [];
+	const { participants, links } = loadRideData(e.id);
+	const seekingOpen = directions.reduce((n, d) => {
+		const taken = new Set(
+			links.filter((l) => l.direction === d).map((l) => l.passengerRegistrationId)
+		);
+		return (
+			n + participants.filter((p) => isSeeker(p.legs[d]) && !taken.has(p.registrationId)).length
+		);
+	}, 0);
+
 	return {
 		overview: {
 			startsAt: e.startsAt,
 			endsAt: e.endsAt,
 			timezone: e.timezone,
+			startHasTime: e.startHasTime,
+			endHasTime: e.endHasTime,
+			deadlineHasTime: e.deadlineHasTime,
 			registrationDeadline: e.registrationDeadline,
-			registrationClosed: e.registrationClosed,
 			capacity: e.capacity,
 			locationName: e.locationName,
-			locationAddress: e.locationAddress,
-			fieldCount: listFields(e.id).length,
+			locationArea: e.locationArea,
 			registrations: countActiveRegistrations(e.id),
+			hasTravel: directions.length > 0,
+			seekingOpen,
 			blockers: publishBlockers(e)
 		},
 		qr,
-		created: url.searchParams.has('created')
+		published: url.searchParams.has('published')
 	};
 };
 
-function requireEvent(id: string, userId: string) {
-	const e = getEventForOrganizer(id, userId);
-	if (!e) redirect(303, '/');
-	return e;
-}
-
 export const actions: Actions = {
+	/** Drafts can be published right from the overview. */
 	publish: ({ params, locals }) => {
-		const e = requireEvent(params.id, locals.user!.id);
-		if (publishBlockers(e).length) return fail(400, { error: 'blocked' });
+		const e = getEventForOrganizer(params.id, locals.user!.id);
+		if (!e) redirect(303, '/');
+		if (publishBlockers(e).length) return fail(400, { error: 'blocked' as const });
 		setEventStatus(e.id, 'published');
-	},
-	unpublish: ({ params, locals }) => {
-		setEventStatus(requireEvent(params.id, locals.user!.id).id, 'draft');
-	},
-	close: ({ params, locals }) => {
-		setRegistrationClosed(requireEvent(params.id, locals.user!.id).id, true);
-	},
-	reopen: ({ params, locals }) => {
-		setRegistrationClosed(requireEvent(params.id, locals.user!.id).id, false);
-	},
-	archive: ({ params, locals }) => {
-		setEventStatus(requireEvent(params.id, locals.user!.id).id, 'archived');
-	},
-	unarchive: ({ params, locals }) => {
-		setEventStatus(requireEvent(params.id, locals.user!.id).id, 'draft');
-	},
-	duplicate: ({ params, locals }) => {
-		const copy = duplicateEvent(
-			requireEvent(params.id, locals.user!.id),
-			locals.user!.id,
-			m.event_copy_suffix()
-		);
-		redirect(303, `/events/${copy.id}/details?copied=1`);
-	},
-	delete: async ({ params, locals, request }) => {
-		const e = requireEvent(params.id, locals.user!.id);
-		const confirm = String((await request.formData()).get('confirm') ?? '').trim();
-		if (confirm !== e.title) return fail(400, { error: 'confirm' });
-		deleteEvent(e.id);
-		redirect(303, '/');
+		redirect(303, `/events/${e.id}?published=1`);
 	}
 };

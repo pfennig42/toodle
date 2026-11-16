@@ -33,7 +33,7 @@ test('confirmation, ride hints, ride links, reminders and unsubscribing', async 
 	await leaPage.goto(`/e/${simple}`);
 	await ready(leaPage);
 	await leaPage.getByLabel('Lieblingsspiel').fill('Doppelkopf');
-	await leaPage.getByRole('button', { name: 'Verbindlich anmelden' }).click();
+	await leaPage.getByRole('button', { name: 'Anmelden', exact: true }).click();
 	await expect
 		.poll(() => outbox(lea.email).map((m) => m.subject))
 		.toContain('Angemeldet: Spieleabend');
@@ -57,7 +57,7 @@ test('confirmation, ride hints, ride links, reminders and unsubscribing', async 
 		.toContain('Mitfahrgelegenheit für „Sommerlager“');
 	await expect
 		.poll(() => outbox(anna.email).map((m) => m.subject), { timeout: 10_000 })
-		.toContain('Auf deiner Strecke wird eine Mitfahrt gesucht – Sommerlager');
+		.toContain('Sommerlager: Auf deiner Strecke wird eine Mitfahrt gesucht');
 	const hint = outbox(lea.email).find((m) => m.subject.startsWith('Mitfahrgelegenheit'))!;
 	expect(hint.text).toContain('Anreise: Anna (Köln-Ehrenfeld) fährt mit dem Auto');
 	expect(hint.text).toContain(`http://localhost:4317/e/${camp}/rides?dir=to`);
@@ -75,11 +75,11 @@ test('confirmation, ride hints, ride links, reminders and unsubscribing', async 
 	await page.getByRole('button', { name: 'Zuordnen' }).click();
 	await expect
 		.poll(() => outbox(lea.email).map((m) => m.subject))
-		.toContain('Du fährst bei Anna mit – Sommerlager');
+		.toContain('Sommerlager: Du fährst bei Anna mit');
 	await expect
 		.poll(() => outbox(anna.email).map((m) => m.subject))
-		.toContain('Lea fährt bei dir mit – Sommerlager');
-	expect(outbox(lea.email).find((m) => m.subject.startsWith('Du fährst'))!.text).toContain(
+		.toContain('Sommerlager: Lea fährt bei dir mit');
+	expect(outbox(lea.email).find((m) => m.subject.includes('Du fährst'))!.text).toContain(
 		'Eingetragen von Olga Orga.'
 	);
 	expect(outbox(olga.email)).toHaveLength(0);
@@ -105,7 +105,7 @@ test('confirmation, ride hints, ride links, reminders and unsubscribing', async 
 	await expect(anon.getByText(`„Mitfahr-Hinweise“ für ${lea.email} abbestellen?`)).toBeVisible();
 	await anon.getByRole('button', { name: 'Abbestellen' }).click();
 	await expect(
-		anon.getByText('Erledigt – du bekommst keine „Mitfahr-Hinweise“ mehr.')
+		anon.getByText('Erledigt. Du bekommst keine „Mitfahr-Hinweise“ mehr.')
 	).toBeVisible();
 
 	await leaPage.goto('/profile');

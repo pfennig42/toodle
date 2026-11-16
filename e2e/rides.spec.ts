@@ -64,7 +64,9 @@ test('participants find and connect rides; organizers assign them', async ({
 
 	// Lea (looking for a ride from Köln) sees Anna first – right on her way
 	const lea = await open('Lea');
-	const drivers = lea.locator('section', { has: lea.getByRole('heading', { name: 'Fahrende' }) });
+	const drivers = lea.locator('section', {
+		has: lea.getByRole('heading', { name: 'Wer mit dem Auto fährt' })
+	});
 	const cards = drivers.locator('li.ride');
 	await expect(cards.first()).toContainText('Anna');
 	await expect(cards.first()).toContainText('liegt auf dem Weg');
@@ -74,7 +76,7 @@ test('participants find and connect rides; organizers assign them', async ({
 	);
 	// Ben's car is full → shown, but no "ride with" button
 	const ben = cards.filter({ hasText: 'Ben' });
-	await expect(ben).toContainText('Auto ist voll');
+	await expect(ben).toContainText('Kein Platz frei');
 	await expect(ben.getByRole('button')).toHaveCount(0);
 	// Privacy: no addresses anywhere
 	await expect(lea.locator('body')).not.toContainText('Geheimstraße');
@@ -86,7 +88,7 @@ test('participants find and connect rides; organizers assign them', async ({
 	const anna = await open('Anna');
 	await expect(anna.getByText('Fahren bei dir mit')).toBeVisible();
 	const seekers = anna
-		.locator('section', { has: anna.getByRole('heading', { name: 'Suchen eine Mitfahrt' }) })
+		.locator('section', { has: anna.getByRole('heading', { name: 'Wer eine Mitfahrt sucht' }) })
 		.locator('li.ride');
 	await expect(seekers.first()).toContainText('Tim');
 	await expect(seekers.first()).toContainText('über Waldheim Bahnhof');
@@ -94,8 +96,8 @@ test('participants find and connect rides; organizers assign them', async ({
 	await seekers.first().getByRole('button', { name: 'Ich nehme Tim mit' }).click();
 	await expect(anna.locator('.highlight').getByText('Tim')).toBeVisible();
 	// One tap: car is full now
-	await anna.getByRole('button', { name: 'Auto ist voll' }).click();
-	await expect(anna.getByRole('button', { name: 'Auto ist voll' })).toHaveAttribute(
+	await anna.getByRole('button', { name: 'Kein Platz frei' }).click();
+	await expect(anna.getByRole('button', { name: 'Kein Platz frei' })).toHaveAttribute(
 		'aria-pressed',
 		'true'
 	);
@@ -123,10 +125,10 @@ test('participants find and connect rides; organizers assign them', async ({
 	await select.selectOption(annaValue!);
 	await openSeekers.getByRole('button', { name: 'Zuordnen' }).click();
 	const driversCard = olga
-		.locator('.card', { has: olga.getByRole('heading', { name: 'Fahrende' }) })
+		.locator('.card', { has: olga.getByRole('heading', { name: 'Wer mit dem Auto fährt' }) })
 		.first();
 	await expect(driversCard.locator('li', { hasText: 'Anna' })).toContainText('Tim');
-	await expect(olga.getByText(/Noch offen oder ohne Angabe: .*Udo/).first()).toBeVisible();
+	await expect(olga.getByText(/Ohne Angabe: .*Udo/).first()).toBeVisible();
 	await olga.screenshot({ path: testInfo.outputPath('03-orga.png'), fullPage: true });
 
 	// Not registered → no access to the ride view
@@ -135,12 +137,12 @@ test('participants find and connect rides; organizers assign them', async ({
 		frieda.getByText('Die Mitfahr-Ansicht sehen nur angemeldete Teilnehmende.')
 	).toBeVisible();
 
-	// Anna switches to "not sure yet" → her passengers are free again
+	// Anna switches to "not specified" → her passengers are free again
 	const annaEdit = await open('Anna', `/e/${slug}`);
 	await annaEdit.getByRole('button', { name: 'Anmeldung bearbeiten' }).click();
 	await annaEdit
 		.getByRole('group', { name: 'Anreise', exact: true })
-		.getByRole('radio', { name: /Noch offen/ })
+		.getByRole('radio', { name: /Keine Angabe/ })
 		.click();
 	await annaEdit.getByRole('button', { name: 'Änderungen speichern' }).click();
 	await expect(annaEdit.getByText('Deine Anmeldung wurde aktualisiert.')).toBeVisible();

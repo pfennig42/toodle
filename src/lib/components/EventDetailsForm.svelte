@@ -18,20 +18,20 @@
 	// svelte-ignore state_referenced_locally
 	let location = $state(values.location);
 	// svelte-ignore state_referenced_locally
-	let startsAt = $state(values.startsAt);
+	let startDate = $state(values.startDate);
 	// svelte-ignore state_referenced_locally
-	let endsAt = $state(values.endsAt);
+	let endDate = $state(values.endDate);
 
 	const zones = $derived(timeZoneOptions(values.timezone || DEFAULT_TIMEZONE));
 	const has = (key: string) => errors.includes(key);
 
 	/** Suggest an end two days later when only the start is set – the typical weekend event. */
 	function suggestEnd() {
-		if (startsAt && !endsAt) {
+		if (startDate && !endDate) {
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local temporary, not state
-			const d = new Date(startsAt + ':00Z');
+			const d = new Date(startDate + 'T12:00:00Z');
 			d.setUTCDate(d.getUTCDate() + 2);
-			endsAt = d.toISOString().slice(0, 16);
+			endDate = d.toISOString().slice(0, 10);
 		}
 	}
 </script>
@@ -45,27 +45,41 @@
 
 	<fieldset>
 		<legend>{m.event_when()}</legend>
-		<div class="grid-2">
+		<div class="when">
 			<label class="field">
 				<span>{m.event_starts()}</span>
-				<input
-					type="datetime-local"
-					name="startsAt"
-					required
-					bind:value={startsAt}
-					onchange={suggestEnd}
-				/>
-				{#if has('start')}<span class="error small">{m.event_error_date()}</span>{/if}
+				<input type="date" name="startDate" required bind:value={startDate} onchange={suggestEnd} />
 			</label>
 			<label class="field">
-				<span>{m.event_ends()}</span>
-				<input type="datetime-local" name="endsAt" required bind:value={endsAt} min={startsAt} />
-				{#if has('end')}<span class="error small">{m.event_error_date()}</span>{/if}
-				{#if has('end_before_start')}<span class="error small"
-						>{m.event_error_end_before_start()}</span
-					>{/if}
+				<span>{m.event_time()}</span>
+				<input
+					type="time"
+					name="startTime"
+					bind:value={v.startTime}
+					aria-label={m.event_time_of({ what: m.event_starts() })}
+				/>
 			</label>
 		</div>
+		{#if has('start')}<span class="error small">{m.event_error_date()}</span>{/if}
+		<div class="when">
+			<label class="field">
+				<span>{m.event_ends()}</span>
+				<input type="date" name="endDate" required bind:value={endDate} min={startDate} />
+			</label>
+			<label class="field">
+				<span>{m.event_time()}</span>
+				<input
+					type="time"
+					name="endTime"
+					bind:value={v.endTime}
+					aria-label={m.event_time_of({ what: m.event_ends() })}
+				/>
+			</label>
+		</div>
+		{#if has('end')}<span class="error small">{m.event_error_date()}</span>{/if}
+		{#if has('end_before_start')}<span class="error small">{m.event_error_end_before_start()}</span
+			>{/if}
+		<p class="muted small">{m.event_time_hint()}</p>
 		<label class="field">
 			<span>{m.event_timezone()}</span>
 			<select name="timezone" bind:value={v.timezone}>
@@ -97,17 +111,23 @@
 
 	<fieldset>
 		<legend>{m.event_registration()}</legend>
-		<div class="grid-2">
-			<label class="field">
-				<span>{m.event_deadline()} <span class="muted">({m.optional()})</span></span>
-				<input
-					type="datetime-local"
-					name="registrationDeadline"
-					bind:value={v.registrationDeadline}
-					max={endsAt}
-				/>
-				{#if has('deadline')}<span class="error small">{m.event_error_deadline()}</span>{/if}
-			</label>
+		<div class="stack">
+			<div class="when">
+				<label class="field">
+					<span>{m.event_deadline()} <span class="muted">({m.optional()})</span></span>
+					<input type="date" name="deadlineDate" bind:value={v.deadlineDate} max={endDate} />
+				</label>
+				<label class="field">
+					<span>{m.event_time()}</span>
+					<input
+						type="time"
+						name="deadlineTime"
+						bind:value={v.deadlineTime}
+						aria-label={m.event_time_of({ what: m.event_deadline() })}
+					/>
+				</label>
+				{#if has('deadline')}<span class="error small full">{m.event_error_deadline()}</span>{/if}
+			</div>
 			<label class="field">
 				<span>{m.event_capacity()} <span class="muted">({m.optional()})</span></span>
 				<input
@@ -133,3 +153,22 @@
 		<button class="btn btn-primary">{submitLabel}</button>
 	</div>
 </div>
+
+<style>
+	/* date and its optional time side by side – also on phones */
+	.when {
+		display: grid;
+		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+		gap: var(--space-2);
+		align-items: end;
+	}
+
+	.when input {
+		width: 100%;
+		min-width: 0;
+	}
+
+	.full {
+		grid-column: 1 / -1;
+	}
+</style>

@@ -115,5 +115,7 @@ test('organizers see participants, export CSV, remove people and plan days', asy
 	await expect(answers.getByRole('listitem').filter({ hasText: 'vegan' })).toContainText('2');
 	const mobility = page.getByRole('region', { name: 'Mobilität' });
 	await expect(mobility.getByRole('listitem').filter({ hasText: 'Auto' })).toContainText('1');
-	await expect(mobility.getByRole('listitem').filter({ hasText: 'Noch offen' })).toContainText('1');
+	await expect(mobility.getByRole('listitem').filter({ hasText: 'Keine Angabe' })).toContainText(
+		'1'
+	);
 });

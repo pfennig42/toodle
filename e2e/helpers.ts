@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scryptSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import type { BrowserContext, Page } from '@playwright/test';
@@ -7,14 +7,14 @@ const DB_PATH = 'e2e/.tmp/test.db';
 const BASE = 'http://localhost:4317';
 
 /** Creates an onboarded user with a session directly in the test database and logs the context in. */
-export async function loginAs(context: BrowserContext, name: string) {
+export async function loginAs(context: BrowserContext, name: string, onboarded = true) {
 	const db = new Database(DB_PATH);
 	const userId = randomUUID();
 	const email = `${name.toLowerCase().replace(/\W+/g, '.')}.${randomBytes(3).toString('hex')}@example.org`;
 	const now = Math.floor(Date.now() / 1000);
 	db.prepare(
 		'insert into user (id, email, name, onboarded_at, created_at) values (?, ?, ?, ?, ?)'
-	).run(userId, email, name, now, now);
+	).run(userId, email, onboarded ? name : null, onboarded ? now : null, now);
 	const token = randomBytes(32).toString('base64url');
 	const id = createHash('sha256').update(token).digest('hex');
 	db.prepare('insert into session (id, user_id, expires_at) values (?, ?, ?)').run(
@@ -287,4 +287,33 @@ export function pushOutbox(userId?: string): SentPush[] {
 		.filter(Boolean)
 		.map((l) => JSON.parse(l) as SentPush)
 		.filter((p) => !userId || p.userId === userId);
+}
+
+/** Gives a user a password (same format as src/lib/server/auth/crypto.ts). */
+export function setPassword(userId: string, password: string) {
+	const salt = randomBytes(16);
+	const key = scryptSync(password.normalize('NFKC'), salt, 64, {
+		N: 2 ** 15,
+		r: 8,
+		p: 1,
+		maxmem: 64 * 1024 * 1024
+	});
+	const hash = [
+		'scrypt',
+		2 ** 15,
+		8,
+		1,
+		salt.toString('base64url'),
+		key.toString('base64url')
+	].join('$');
+	const db = new Database(DB_PATH);
+	db.prepare('update user set password_hash = ? where id = ?').run(hash, userId);
+	db.close();
+}
+
+export function slugOf(eventId: string): string {
+	const db = new Database(DB_PATH);
+	const row = db.prepare('select slug from event where id = ?').get(eventId) as { slug: string };
+	db.close();
+	return row.slug;
 }

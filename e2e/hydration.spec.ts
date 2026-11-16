@@ -10,8 +10,10 @@ test('input made before hydration survives', async ({ page, context }) => {
 	});
 	await page.goto('/events/new', { waitUntil: 'commit' });
 	await page.getByLabel('Titel', { exact: true }).fill('Früh getippt');
-	await page.getByLabel('Beginn', { exact: true }).fill('2030-05-01T10:00');
+	await page.getByLabel('Beginn', { exact: true }).fill('2030-05-01');
+	await page.getByLabel('Beginn: Uhrzeit (optional)').fill('10:00');
 	await page.waitForSelector('html[data-hydrated]');
 	await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Früh getippt');
-	await expect(page.getByLabel('Beginn', { exact: true })).toHaveValue('2030-05-01T10:00');
+	await expect(page.getByLabel('Beginn', { exact: true })).toHaveValue('2030-05-01');
+	await expect(page.getByLabel('Beginn: Uhrzeit (optional)')).toHaveValue('10:00');
 });

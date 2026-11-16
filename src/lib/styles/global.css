@@ -12,6 +12,9 @@
 	--accent-soft: #dcebe1;
 	--danger: #b3261e;
 	--coral: #e0644a;
+	/* main call to action – the warm coral of the logo (white text 4.9:1) */
+	--cta: #c4472e;
+	--cta-text: #ffffff;
 
 	--radius: 0.6rem;
 	--space-1: 0.25rem;
@@ -30,33 +33,39 @@
 @media (prefers-color-scheme: dark) {
 	:root[data-theme='system'] {
 		color-scheme: dark;
-		--bg: #171a18;
-		--surface: #202421;
-		--surface-2: #2a2f2b;
-		--border: #3a403b;
-		--text: #ecebe6;
-		--text-muted: #a5aaa6;
+		/* warm charcoal instead of green-grey – evening light, not a server room */
+		--bg: #1b1916;
+		--surface: #24211d;
+		--surface-2: #2e2a25;
+		--border: #433d36;
+		--text: #f0ebe3;
+		--text-muted: #b3aa9f;
 		--accent: #7fc29b;
 		--accent-text: #10241a;
-		--accent-soft: #23372b;
+		--accent-soft: #26332a;
 		--danger: #f2948c;
 		--coral: #f08a73;
+		--cta: #f0846b;
+		--cta-text: #2a0f08;
 	}
 }
 
 :root[data-theme='dark'] {
 	color-scheme: dark;
-	--bg: #171a18;
-	--surface: #202421;
-	--surface-2: #2a2f2b;
-	--border: #3a403b;
-	--text: #ecebe6;
-	--text-muted: #a5aaa6;
+	/* warm charcoal instead of green-grey – evening light, not a server room */
+	--bg: #1b1916;
+	--surface: #24211d;
+	--surface-2: #2e2a25;
+	--border: #433d36;
+	--text: #f0ebe3;
+	--text-muted: #b3aa9f;
 	--accent: #7fc29b;
 	--accent-text: #10241a;
-	--accent-soft: #23372b;
+	--accent-soft: #26332a;
 	--danger: #f2948c;
 	--coral: #f08a73;
+	--cta: #f0846b;
+	--cta-text: #2a0f08;
 }
 
 *,
@@ -131,21 +140,30 @@ textarea {
 }
 
 .btn-primary {
-	background: var(--accent);
-	border-color: var(--accent);
-	color: var(--accent-text);
+	background: var(--cta);
+	border-color: var(--cta);
+	color: var(--cta-text);
+	font-weight: 600;
 }
 
 .btn-primary:hover {
-	background: var(--accent);
-	filter: brightness(1.08);
+	background: var(--cta);
+	filter: brightness(1.06);
 }
 
 .card {
 	background: var(--surface);
-	border: 1px solid var(--border);
-	border-radius: var(--radius);
+	/* soft and raised instead of outlined: the border only hints the edge (dark theme) */
+	border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+	border-radius: calc(var(--radius) * 1.25);
+	box-shadow: 0 2px 12px rgb(0 0 0 / 0.05);
 	padding: var(--space-6);
+}
+
+@media (max-width: 40rem) {
+	.card {
+		padding: var(--space-4);
+	}
 }
 
 .muted {
@@ -389,4 +407,19 @@ ul.plain {
 	list-style: none;
 	margin: 0;
 	padding: 0;
+}
+
+/* A button that looks like a link: for quiet, secondary actions next to one main button. */
+.link-btn {
+	display: inline-flex;
+	align-items: center;
+	min-height: var(--touch);
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--accent);
+	font: inherit;
+	text-decoration: underline;
+	text-underline-offset: 0.15em;
+	cursor: pointer;
 }

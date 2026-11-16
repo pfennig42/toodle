@@ -19,7 +19,7 @@ const FIELDS = [
 const leg = (page: Page, name: 'Anreise' | 'Abreise') =>
 	page.getByRole('group', { name, exact: true });
 
-test('participant signs up with two alternative pick-up stations, edits and withdraws', async ({
+test('participant looks for a ride with alternative pick-up points, edits and withdraws', async ({
 	page,
 	context,
 	browser
@@ -38,7 +38,7 @@ test('participant signs up with two alternative pick-up stations, edits and with
 	const anon = await browser.newContext({ locale: 'de-DE' });
 	const anonPage = await anon.newPage();
 	await anonPage.goto(`/e/${slug}`);
-	await expect(anonPage.getByRole('link', { name: 'Einloggen & anmelden' })).toHaveAttribute(
+	await expect(anonPage.getByRole('link', { name: 'Ich bin dabei' })).toHaveAttribute(
 		'href',
 		`/login?next=${encodeURIComponent(`/e/${slug}`)}`
 	);
@@ -50,69 +50,94 @@ test('participant signs up with two alternative pick-up stations, edits and with
 	await page.goto(`/e/${slug}`);
 	await ready(page);
 
+	// Name and email come from the account: shown prefilled, not editable here
+	const account = page.locator('#registration dl').first();
+	await expect(account.getByText('Lea S.', { exact: true })).toBeVisible();
+	await expect(account.getByText(lea.email)).toBeVisible();
+	// plain text, no inputs – password managers (e.g. Bitwarden) would hook into those
+	await expect(account.locator('input')).toHaveCount(0);
+
 	// Submitting without choices shows errors
-	await page.getByRole('button', { name: 'Verbindlich anmelden' }).click();
+	await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
 	await expect(page.getByText('Bitte prüfe die markierten Angaben.')).toBeVisible();
 	await expect(leg(page, 'Anreise').getByText(/Bitte wähle aus, wie du an/)).toBeVisible();
 	await expect(page.getByText('Bitte ausfüllen.')).toBeVisible();
 
-	// Arrival by train – two alternative stations
-	await leg(page, 'Anreise').getByRole('radio', { name: /ÖV/ }).click();
-	await leg(page, 'Anreise').getByRole('button', { name: '+ Bahnhof hinzufügen' }).click();
+	// Arrival: looking for a ride – home (saved place, suggested) or one of two stations
 	await leg(page, 'Anreise')
-		.getByPlaceholder('Bahnhof oder Treffpunkt suchen …')
+		.getByRole('radio', { name: /Suche Mitfahrt/ })
+		.click();
+	await expect(leg(page, 'Anreise').getByText('📍 Zuhause')).toBeVisible();
+	await expect(leg(page, 'Anreise').getByLabel('An welchem Tag?')).toHaveValue(
+		/^\d{4}-\d{2}-\d{2}$/
+	); // event's first day
+	await leg(page, 'Anreise').getByRole('button', { name: '+ Adresse oder Bahnhof' }).click();
+	await leg(page, 'Anreise')
+		.getByPlaceholder('Adresse oder Bahnhof suchen …')
 		.fill('Waldheim Bahnhof');
 	await leg(page, 'Anreise')
 		.getByRole('button', { name: /Waldheim Bahnhof/ })
 		.click();
-	await leg(page, 'Anreise')
-		.getByLabel(/Ankunft dort ca/)
-		.fill('2030-01-01T16:40');
-	await leg(page, 'Anreise').getByRole('button', { name: '+ Weitere Alternative' }).click();
-	await leg(page, 'Anreise').getByPlaceholder('Bahnhof oder Treffpunkt suchen …').fill('Talhausen');
+	await leg(page, 'Anreise').getByLabel('Uhrzeit (optional)').nth(1).fill('16:40');
+	await leg(page, 'Anreise').getByRole('button', { name: '+ Adresse oder Bahnhof' }).click();
+	await leg(page, 'Anreise').getByPlaceholder('Adresse oder Bahnhof suchen …').fill('Talhausen');
 	await leg(page, 'Anreise')
 		.getByRole('button', { name: /Talhausen Bf/ })
 		.click();
 
-	// Departure by car, already full
+	// The return trip took over the arrival …
+	await expect(leg(page, 'Abreise').getByRole('radio', { name: /Suche Mitfahrt/ })).toBeChecked();
+	await expect(leg(page, 'Abreise').getByText('Talhausen Bf')).toBeVisible();
+	// … until changed: by car, already full → where from / when don't matter
 	await leg(page, 'Abreise').getByRole('radio', { name: /Auto/ }).click();
-	await expect(leg(page, 'Abreise').getByRole('combobox')).toHaveValue(/.+/); // saved place preselected
-	await leg(page, 'Abreise').getByRole('radio', { name: 'Auto ist voll' }).click();
+	await leg(page, 'Abreise').getByRole('radio', { name: 'Nein' }).click();
+	await expect(leg(page, 'Abreise').getByRole('combobox')).toHaveCount(0);
+	await expect(leg(page, 'Abreise').getByLabel(/Abfahrt/)).toHaveCount(0);
+	// arrival changes no longer touch the return trip
+	await leg(page, 'Anreise').getByRole('button', { name: 'Entfernen' }).first().click();
+	await expect(leg(page, 'Abreise').getByRole('radio', { name: 'Nein' })).toBeChecked();
 
 	await page.getByRole('radio', { name: 'Vegan' }).check();
 	await page.getByLabel(/Kommentar/).fill('Komme evtl. etwas später');
+	// no contact option yet → asked right here, saved to the profile
+	const contact = page.getByRole('group', { name: /Wie erreichen dich andere für Mitfahrten/ });
+	await contact.getByRole('combobox').selectOption('signal');
+	await contact.getByLabel('Nummer / Name').fill('+49 170 1234567');
 	await shot('01-form-filled');
-	await page.getByRole('button', { name: 'Verbindlich anmelden' }).click();
+	await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
 
 	// Summary
-	await expect(page.getByText('✓ Du bist angemeldet')).toBeVisible();
+	await expect(page.getByText('✓ Du bist dabei!')).toBeVisible();
 	const summary = page.locator('#registration');
-	await expect(summary.getByText(/Abholung:/)).toContainText('Waldheim Bahnhof');
+	await expect(summary.getByText(/Abholung:/)).toContainText('Waldheim Bahnhof ~16:40');
 	await expect(summary.getByText(/Abholung:/)).toContainText('oder');
 	await expect(summary.getByText(/Abholung:/)).toContainText('Talhausen Bf');
-	await expect(summary.getByText('Auto ist voll')).toBeVisible();
+	await expect(summary.getByText(/Abholung:/)).not.toContainText('Zuhause'); // removed above
+	await expect(summary.getByText('Kein Platz frei')).toBeVisible();
 	await expect(summary.getByText('Vegan')).toBeVisible();
-	await expect(summary.getByText(/Kontaktweg/)).toBeVisible(); // no contact yet → hint
+	await expect(summary.getByText(/Kontaktweg/)).toHaveCount(0); // contact given in the form
 	await shot('02-summary');
 
 	// Edit: car has room again – values are prefilled
 	await page.getByRole('button', { name: 'Anmeldung bearbeiten' }).click();
 	await expect(leg(page, 'Anreise').getByText('Talhausen Bf', { exact: true })).toBeVisible();
-	await leg(page, 'Abreise').getByRole('radio', { name: 'Nehme gerne Leute mit' }).click();
+	await leg(page, 'Abreise').getByRole('radio', { name: 'Ja' }).click();
+	// now the start matters – the saved place is suggested
+	await expect(leg(page, 'Abreise').getByRole('combobox')).toHaveValue(/.+/);
 	await page.getByRole('button', { name: 'Änderungen speichern' }).click();
 	await expect(page.getByText('Deine Anmeldung wurde aktualisiert.')).toBeVisible();
-	await expect(summary.getByText('Nehme gerne Leute mit')).toBeVisible();
+	await expect(summary.getByText('Noch Platz frei')).toBeVisible();
 
 	// Dashboard lists the registration
 	await page.goto('/');
-	await expect(page.getByRole('heading', { name: 'Meine Anmeldungen' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Du bist dabei' })).toBeVisible();
 	await page.getByRole('link', { name: /Pfingstlager/ }).click();
 
 	// Withdraw
 	await page.getByText('Abmelden', { exact: true }).click();
 	await page.getByRole('button', { name: 'Ja, abmelden' }).click();
 	await expect(page.getByText('Du hast dich abgemeldet.')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Verbindlich anmelden' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Anmelden', exact: true })).toBeVisible();
 });
 
 test('full events and passed deadlines', async ({ page, context, browser }) => {
@@ -131,8 +156,8 @@ test('full events and passed deadlines', async ({ page, context, browser }) => {
 	const firstPage = await first.newPage();
 	await firstPage.goto(`/e/${fullSlug}`);
 	await ready(firstPage);
-	await firstPage.getByRole('button', { name: 'Verbindlich anmelden' }).click();
-	await expect(firstPage.getByText('✓ Du bist angemeldet')).toBeVisible();
+	await firstPage.getByRole('button', { name: 'Anmelden', exact: true }).click();
+	await expect(firstPage.getByText('✓ Du bist dabei!')).toBeVisible();
 	await first.close();
 
 	const second = await loginAs(context, 'Zweite Person');
@@ -146,14 +171,14 @@ test('full events and passed deadlines', async ({ page, context, browser }) => {
 	await page.goto(`/e/${slug}`);
 	await ready(page);
 	await leg(page, 'Anreise')
-		.getByRole('radio', { name: /Noch offen/ })
+		.getByRole('radio', { name: /Keine Angabe/ })
 		.click();
 	await leg(page, 'Abreise')
-		.getByRole('radio', { name: /Noch offen/ })
+		.getByRole('radio', { name: /Keine Angabe/ })
 		.click();
 	await page.getByRole('radio', { name: 'Alles' }).check();
-	await page.getByRole('button', { name: 'Verbindlich anmelden' }).click();
-	await expect(page.getByText('✓ Du bist angemeldet')).toBeVisible();
+	await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
+	await expect(page.getByText('✓ Du bist dabei!')).toBeVisible();
 
 	passDeadline(slug);
 	await page.reload();

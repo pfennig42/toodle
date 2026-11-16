@@ -1,11 +1,17 @@
+import { m } from '#lib/paraglide/messages.js';
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, count, eq } from 'drizzle-orm';
 import { utcToZoned } from '#lib/datetime.js';
 import { COMMENT_MAX, type LegInput, type TravelInput } from '#lib/registration.js';
 import { db } from '#lib/server/db/index.js';
-import { eventOrganizer, type Event } from '#lib/server/db/schema.js';
-import { getEventBySlug, listFields, registrationState } from '#lib/server/events.js';
-import { listContacts, listPlaces } from '#lib/server/profile.js';
+import { eventOrganizer, registration, travelLeg, type Event } from '#lib/server/db/schema.js';
+import {
+	getEventBySlug,
+	listFields,
+	listOrganizers,
+	registrationState
+} from '#lib/server/events.js';
+import { addContact, listContacts, listPlaces, parseContact } from '#lib/server/profile.js';
 import { parseAnswers, parseTravel } from '#lib/server/registration-rules.js';
 import {
 	countActiveRegistrations,
@@ -38,6 +44,26 @@ function loadEvent(slug: string, userId: string | undefined) {
 
 type Saved = ReturnType<typeof listPlaces>;
 
+/** People with a car and free seats on the way there – the number that makes the idea tangible. */
+function countDrivers(eventId: string) {
+	return (
+		db
+			.select({ n: count() })
+			.from(travelLeg)
+			.innerJoin(registration, eq(registration.id, travelLeg.registrationId))
+			.where(
+				and(
+					eq(registration.eventId, eventId),
+					eq(registration.status, 'active'),
+					eq(travelLeg.direction, 'to'),
+					eq(travelLeg.mode, 'car'),
+					eq(travelLeg.carStatus, 'offering')
+				)
+			)
+			.get()?.n ?? 0
+	);
+}
+
 /** Turns a stored registration back into the form's input shape. */
 function toTravelInput(reg: FullRegistration, e: Event, saved: Saved): TravelInput {
 	const input: TravelInput = {};
@@ -45,7 +71,11 @@ function toTravelInput(reg: FullRegistration, e: Event, saved: Saved): TravelInp
 		const match = saved.find((p) => p.address === leg.placeAddress && p.label === leg.placeLabel);
 		input[leg.direction] = {
 			mode: leg.mode,
-			time: leg.time ? utcToZoned(leg.time, e.timezone) : '',
+			time: leg.time
+				? leg.hasClock
+					? utcToZoned(leg.time, e.timezone)
+					: utcToZoned(leg.time, e.timezone).slice(0, 10)
+				: '',
 			place: match
 				? { kind: 'saved', id: match.id }
 				: leg.placeAddress && leg.lat !== null && leg.lon !== null
@@ -73,11 +103,20 @@ function toTravelInput(reg: FullRegistration, e: Event, saved: Saved): TravelInp
 	return input;
 }
 
+/**
+ * A fresh leg: the day prefilled from the event (arrival → first day, departure → last day).
+ * The time only where it is known: leaving when the event ends; arriving is up to the guest.
+ */
 function defaultLeg(e: Event, saved: Saved, direction: 'to' | 'from'): LegInput {
+	const startDay = utcToZoned(e.startsAt, e.timezone).slice(0, 10);
+	const end = utcToZoned(e.endsAt, e.timezone);
 	return {
 		mode: null,
-		time: direction === 'from' ? utcToZoned(e.endsAt, e.timezone) : '',
-		place: saved[0] ? { kind: 'saved', id: saved[0].id } : null,
+		time: direction === 'to' ? startDay : e.endHasTime ? end : end.slice(0, 10),
+		// no saved places yet: straight to the address search
+		place: saved[0]
+			? { kind: 'saved', id: saved[0].id }
+			: { kind: 'custom', label: m.place_default_home(), point: null, save: true },
 		carStatus: 'offering',
 		carNote: '',
 		pickups: []
@@ -116,10 +155,19 @@ export const load: PageServerLoad = ({ params, locals }) => {
 			endsAt: e.endsAt,
 			timezone: e.timezone,
 			registrationDeadline: e.registrationDeadline,
+			startHasTime: e.startHasTime,
+			endHasTime: e.endHasTime,
+			deadlineHasTime: e.deadlineHasTime,
 			capacity: e.capacity,
 			state
 		},
 		fields,
+		// display names of the team: a face to the invitation, no e-mail addresses
+		hosts: listOrganizers(e.id)
+			.map((o) => o.name?.trim())
+			.filter((n): n is string => !!n),
+		going: countActiveRegistrations(e.id),
+		drivers: countDrivers(e.id),
 		isOrganizer: organizer,
 		loggedIn: !!me,
 		full: me
@@ -185,11 +233,17 @@ export const actions: Actions = {
 				})
 			: { ok: true as const, legs: [], placesToSave: [] };
 
-		if ((answers && !answers.ok) || !travel.ok) {
+		// optional contact option, asked in the form when the person has none yet
+		const contactValue = String(form.get('value') ?? '').trim();
+		const contact = contactValue ? parseContact(form) : null;
+		const contactError = !!contactValue && !contact;
+
+		if ((answers && !answers.ok) || !travel.ok || contactError) {
 			return fail(400, {
 				error: 'invalid' as const,
 				answerErrors: answers && !answers.ok ? answers.errors : {},
-				travelErrors: !travel.ok ? travel.errors : {}
+				travelErrors: !travel.ok ? travel.errors : {},
+				contactError
 			});
 		}
 
@@ -201,6 +255,7 @@ export const actions: Actions = {
 			legs: travel.legs,
 			placesToSave: travel.placesToSave
 		});
+		if (contact && listContacts(me.id).length === 0) addContact(me.id, contact);
 		// Confirmation only for new (or renewed) registrations, not for every edit.
 		if (!isActive) void sendConfirmation(e.id, me.id);
 		return { saved: true, wasRegistered: isActive };

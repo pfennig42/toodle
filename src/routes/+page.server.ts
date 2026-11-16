@@ -13,6 +13,8 @@ export const load: PageServerLoad = ({ locals }) => {
 		startsAt: e.startsAt,
 		endsAt: e.endsAt,
 		timezone: e.timezone,
+		startHasTime: e.startHasTime,
+		endHasTime: e.endHasTime,
 		state: registrationState(e, now)
 	}));
 	const registered = listRegistrationsForUser(locals.user.id)
@@ -26,6 +28,8 @@ export const load: PageServerLoad = ({ locals }) => {
 			startsAt: e.startsAt,
 			endsAt: e.endsAt,
 			timezone: e.timezone,
+			startHasTime: e.startHasTime,
+			endHasTime: e.endHasTime,
 			state: registrationState(e, now)
 		}));
 	return {

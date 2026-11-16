@@ -2,30 +2,14 @@
 	import { enhance } from '$app/forms';
 	import { m } from '#lib/paraglide/messages.js';
 	import FormBuilder from '#lib/components/FormBuilder.svelte';
+	import { builderErrorText } from '#lib/builder-errors.js';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
 	let saving = $state(false);
 
-	const errorText = $derived.by(() => {
-		const err = form && 'error' in form ? form.error : null;
-		if (!err) return null;
-		switch (err.kind) {
-			case 'label':
-				return m.builder_error_label({ number: err.index + 1 });
-			case 'options':
-				return m.builder_error_options({ number: err.index + 1 });
-			case 'too_many':
-				return m.builder_error_too_many();
-			case 'travel_twice':
-				return m.builder_error_travel_twice();
-			default:
-				return m.builder_error_invalid();
-		}
-	});
+	const errorText = $derived(builderErrorText(form && 'error' in form ? form.error : null));
 </script>
-
-<p class="muted intro">{m.builder_intro()}</p>
 
 <form
 	method="post"
@@ -47,10 +31,6 @@
 </form>
 
 <style>
-	.intro {
-		margin-bottom: var(--space-4);
-	}
-
 	.saved {
 		margin-top: var(--space-2);
 	}

@@ -87,17 +87,21 @@ const hasPoint = (leg: RideLeg | undefined): leg is RideLeg & { lat: number; lon
 
 export const isDriver = (leg: RideLeg | undefined) => !!leg && leg.mode === 'car' && hasPoint(leg);
 
-/** Seekers: "looking for a ride" from their place, or public transport with pick-up wishes. */
+/**
+ * Seekers: looking for a ride – picked up at home, at a station, … (pick-up points), or from
+ * their place (older registrations); "transit" with pick-up wishes is the older form of it.
+ */
 export const isSeeker = (leg: RideLeg | undefined) =>
 	!!leg &&
-	((leg.mode === 'seeking' && hasPoint(leg)) || (leg.mode === 'transit' && leg.pickups.length > 0));
+	((leg.mode === 'seeking' && (leg.pickups.length > 0 || hasPoint(leg))) ||
+		(leg.mode === 'transit' && leg.pickups.length > 0));
 
 export type SearchPoint = Point & { label: string; time: Date | null; isPickup: boolean };
 
 /** Points where a seeker could be picked up (arrival) or dropped off (departure). */
 export function searchPoints(leg: RideLeg | undefined): SearchPoint[] {
 	if (!leg) return [];
-	if (leg.mode === 'transit') {
+	if (leg.pickups.length > 0 || leg.mode === 'transit') {
 		return leg.pickups.map((p) => ({
 			lat: p.lat,
 			lon: p.lon,

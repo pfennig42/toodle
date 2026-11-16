@@ -1,0 +1,1 @@
+ALTER TABLE `travel_leg` ADD `has_clock` integer DEFAULT true NOT NULL;

@@ -105,6 +105,8 @@ export type ParsedLeg = {
 	direction: TravelDirection;
 	mode: TravelMode;
 	time: Date | null;
+	/** false when only the day was given (time stored as noon) */
+	hasClock: boolean;
 	place: PlaceSnapshot | null;
 	carStatus: CarStatus | null;
 	carNote: string;
@@ -172,9 +174,12 @@ export function parseTravel(
 		}
 
 		// When
+		// "2027-07-16T14:00", or just "2027-07-16" when only the day is known
 		let time: Date | null = null;
+		let hasClock = true;
 		if (typeof leg.time === 'string' && leg.time) {
-			time = zonedToUtc(leg.time, opts.timezone);
+			hasClock = leg.time.length > 10;
+			time = zonedToUtc(hasClock ? leg.time : `${leg.time}T12:00`, opts.timezone);
 			if (!time) {
 				errors[direction] = 'time';
 				continue;
@@ -200,47 +205,65 @@ export function parseTravel(
 		} else if (isObj(choice) && choice.kind === 'custom') {
 			const point = parsePoint(choice.point);
 			const label = typeof choice.label === 'string' ? choice.label.trim().slice(0, 40) : '';
-			if (!point) {
+			if (point) {
+				place = {
+					label: label || point.name,
+					address: point.address,
+					area: point.area,
+					lat: point.lat,
+					lon: point.lon
+				};
+				if (choice.save === true && label) placesToSave.push(place);
+			} else if (choice.point) {
+				// something was sent, but not a valid search result
 				errors[direction] = 'place';
 				continue;
 			}
-			place = {
-				label: label || point.name,
-				address: point.address,
-				area: point.area,
-				lat: point.lat,
-				lon: point.lon
-			};
-			if (choice.save === true && label) placesToSave.push(place);
+			// nothing picked from the search = no place (fine for public transport, see below)
 		}
-		// Car drivers and ride seekers must say where they start – that's what matching is based on.
-		if (!place && (mode === 'car' || mode === 'seeking')) {
-			errors[direction] = 'place';
-			continue;
-		}
-
-		// Car status
+		// Car status (first: if nobody can come along, where from doesn't matter for rides)
 		const carStatus =
 			mode === 'car'
 				? CAR_STATUSES.includes(leg.carStatus as CarStatus)
 					? (leg.carStatus as CarStatus)
 					: 'offering'
 				: null;
+		// Drivers who take people along must say where they start – matching is based on it.
+		if (!place && mode === 'car' && carStatus === 'offering') {
+			errors[direction] = 'place';
+			continue;
+		}
+
 		const carNote =
 			mode === 'car' && typeof leg.carNote === 'string'
 				? leg.carNote.trim().slice(0, CAR_NOTE_MAX)
 				: '';
 
-		// Pick-up / drop-off alternatives (public transport only)
+		// Where to be picked up / dropped off: home, a station, … – several alternatives allowed.
+		// ("transit" is the older mode for station pick-ups and still accepted.)
 		const pickups: ParsedLeg['pickups'] = [];
-		if (mode === 'transit' && Array.isArray(leg.pickups)) {
+		if ((mode === 'seeking' || mode === 'transit') && Array.isArray(leg.pickups)) {
 			if (leg.pickups.length > MAX_PICKUPS) {
 				errors[direction] = 'pickup';
 				continue;
 			}
 			let bad = false;
 			for (const p of leg.pickups) {
-				const point = isObj(p) ? parsePoint(p.point) : null;
+				const saved =
+					isObj(p) && typeof p.savedId === 'string'
+						? opts.savedPlaces.find((sp) => sp.id === p.savedId)
+						: undefined;
+				const point = saved
+					? {
+							name: saved.label,
+							address: saved.address,
+							area: saved.area,
+							lat: saved.lat,
+							lon: saved.lon
+						}
+					: isObj(p)
+						? parsePoint(p.point)
+						: null;
 				const t =
 					isObj(p) && typeof p.time === 'string' && p.time
 						? zonedToUtc(p.time, opts.timezone)
@@ -262,8 +285,13 @@ export function parseTravel(
 				continue;
 			}
 		}
+		// Looking for a ride: say where you can be picked up (older registrations used `place`).
+		if (mode === 'seeking' && pickups.length === 0 && !place) {
+			errors[direction] = 'pickup';
+			continue;
+		}
 
-		legs.push({ direction, mode, time, place, carStatus, carNote, pickups });
+		legs.push({ direction, mode, time, hasClock, place, carStatus, carNote, pickups });
 	}
 
 	return Object.keys(errors).length ? { ok: false, errors } : { ok: true, legs, placesToSave };

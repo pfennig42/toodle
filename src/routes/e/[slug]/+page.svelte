@@ -5,6 +5,7 @@
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatDateTime, formatRange } from '#lib/datetime.js';
 	import { addressWithoutName } from '#lib/location.js';
+	import Icon from '#lib/components/Icon.svelte';
 	import RegistrationForm from '#lib/components/RegistrationForm.svelte';
 	import RegistrationSummary from '#lib/components/RegistrationSummary.svelte';
 	import type { PageProps } from './$types';
@@ -25,8 +26,8 @@
 	);
 	const formErrors = $derived(
 		form && 'error' in form && form.error === 'invalid'
-			? { answers: form.answerErrors, travel: form.travelErrors }
-			: { answers: {}, travel: {} }
+			? { answers: form.answerErrors, travel: form.travelErrors, contact: !!form.contactError }
+			: { answers: {}, travel: {}, contact: false }
 	);
 	const loginHref = $derived(`/login?next=${encodeURIComponent(`/e/${ev.slug}`)}`);
 
@@ -39,6 +40,18 @@
 			? `https://www.openstreetmap.org/?mlat=${ev.lat}&mlon=${ev.lon}#map=15/${ev.lat}/${ev.lon}`
 			: null
 	);
+	const hosts = $derived(
+		new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(data.hosts)
+	);
+	// "12 are coming · 4 have room in their car" – only once somebody is there
+	const crowd = $derived.by(() => {
+		if (!data.going) return '';
+		const going = data.going === 1 ? m.public_going_one() : m.public_going({ count: data.going });
+		if (!data.drivers) return going;
+		const drivers =
+			data.drivers === 1 ? m.public_drivers_one() : m.public_drivers({ count: data.drivers });
+		return `${going} · ${drivers}`;
+	});
 </script>
 
 <svelte:head>
@@ -47,58 +60,76 @@
 </svelte:head>
 
 {#if ev.state === 'draft'}
-	<p class="card banner" role="status">
+	<p class="banner" role="status">
 		{m.public_preview_banner()}
 		<a href={resolve('/events/[id]', { id: ev.id })}>{m.public_back_to_manage()}</a>
 	</p>
 {/if}
 
-<article class="stack-lg">
-	<header class="stack">
+<article class="page">
+	<header>
+		{#if hosts}<p class="hosts">{m.public_hosted_by({ names: hosts })}</p>{/if}
 		<h1>{ev.title}</h1>
-		<dl class="facts">
-			<div>
-				<dt>{m.event_when()}</dt>
-				<dd>{formatRange(ev.startsAt, ev.endsAt, ev.timezone, getLocale())}</dd>
-			</div>
+
+		<ul class="facts">
+			<li>
+				<Icon name="calendar" size={20} />
+				<span>{formatRange(ev.startsAt, ev.endsAt, ev.timezone, getLocale(), ev)}</span>
+			</li>
 			{#if ev.locationName || ev.locationAddress}
-				<div>
-					<dt>{m.event_where()}</dt>
-					<dd>
-						{#if ev.locationName}{ev.locationName}<br />{/if}
-						{#if address}<span class="muted">{address}</span>{/if}
+				<li>
+					<Icon name="pin" size={20} />
+					<span>
+						{#if ev.locationName}<strong>{ev.locationName}</strong><br />{/if}
+						{#if address}<span class="muted">{address}</span><br />{/if}
 						{#if mapUrl}
 							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external link -->
 							<a href={mapUrl} target="_blank" rel="noopener noreferrer">{m.public_map()}</a>
 						{/if}
-					</dd>
-				</div>
+					</span>
+				</li>
 			{/if}
 			{#if ev.registrationDeadline}
-				<div>
-					<dt>{m.event_deadline()}</dt>
-					<dd>{formatDateTime(ev.registrationDeadline, ev.timezone, getLocale())}</dd>
-				</div>
+				<li>
+					<Icon name="clock" size={20} />
+					<span>
+						{m.public_deadline({
+							date: formatDateTime(
+								ev.registrationDeadline,
+								ev.timezone,
+								getLocale(),
+								ev.deadlineHasTime
+							)
+						})}
+					</span>
+				</li>
 			{/if}
-		</dl>
+			{#if crowd}
+				<li>
+					<Icon name="users" size={20} />
+					<span>{crowd}</span>
+				</li>
+			{/if}
+		</ul>
 	</header>
 
 	{#if ev.description}
-		<section class="card description">{ev.description}</section>
+		<p class="description">{ev.description}</p>
 	{/if}
 
-	<section class="card stack" id="registration">
-		<h2>{m.public_registration_title()}</h2>
-
+	<section class="join" id="registration">
 		{#if form && 'saved' in form && form.wasRegistered}
-			<p class="success" role="status">{m.registration_updated_notice()}</p>
+			<p class="notice" role="status">{m.registration_updated_notice()}</p>
 		{/if}
 		{#if form && 'withdrawn' in form}
 			<p class="muted" role="status">{m.registration_withdrawn_notice()}</p>
 		{/if}
 
 		{#if reg && !editing}
-			<p class="registered" role="status">✓ {m.registration_you_are_registered()}</p>
+			<div role="status">
+				<p class="yes">✓ {m.registration_you_are_registered()}</p>
+				<p class="muted">{m.tagline()}</p>
+			</div>
 			<RegistrationSummary
 				fields={data.fields}
 				answers={reg.answers}
@@ -115,23 +146,24 @@
 			<a class="btn btn-primary align-start" href={resolve('/e/[slug]/rides', { slug: ev.slug })}
 				>{m.rides_open()}</a
 			>
-			<div class="actions">
+			<div class="quiet-actions">
 				{#if canEditTravel}
-					<button type="button" class="btn" onclick={() => (editing = true)}>
+					<button type="button" class="link-btn" onclick={() => (editing = true)}>
 						{ev.state === 'open' ? m.registration_edit() : m.registration_edit_travel()}
 					</button>
 				{/if}
 				{#if ev.state !== 'past' && ev.state !== 'archived'}
 					<details class="withdraw">
-						<summary class="btn">{m.registration_withdraw()}</summary>
-						<form method="post" action="?/withdraw" class="stack" use:enhance>
+						<summary class="link-btn">{m.registration_withdraw()}</summary>
+						<form method="post" action="?/withdraw" class="stack-sm" use:enhance>
 							<p class="small muted">{m.registration_withdraw_confirm()}</p>
-							<button class="btn btn-danger">{m.registration_withdraw_submit()}</button>
+							<button class="btn btn-danger align-start">{m.registration_withdraw_submit()}</button>
 						</form>
 					</details>
 				{/if}
 			</div>
 		{:else if showForm}
+			<h2>{reg ? m.registration_edit() : m.public_join_title()}</h2>
 			{#if reg}<p class="muted small">{m.registration_editing_hint()}</p>{/if}
 			<RegistrationForm
 				fields={data.fields}
@@ -144,14 +176,18 @@
 				isUpdate={!!reg}
 				answerErrors={formErrors.answers}
 				travelErrors={formErrors.travel}
+				askContact={!data.hasContact}
+				contactError={formErrors.contact}
 				oncancel={reg ? () => (editing = false) : undefined}
 			/>
 		{:else if ev.state === 'open' && data.full}
+			<h2>{m.public_join_title()}</h2>
 			<p class="muted">{m.registration_full()}</p>
 		{:else if ev.state === 'open' && !data.loggedIn}
-			<p>{m.registration_login_hint()}</p>
+			<h2>{m.public_join_title()}</h2>
+			<p>{m.public_join_text()}</p>
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- login with return path -->
-			<a class="btn btn-primary align-start" href={loginHref}>{m.registration_login_button()}</a>
+			<a class="btn btn-primary align-start" href={loginHref}>{m.public_join_button()}</a>
 		{:else if ev.state === 'draft'}
 			<p class="muted">{m.registration_draft_hint()}</p>
 		{:else if ev.state === 'past'}
@@ -163,57 +199,95 @@
 </article>
 
 <style>
+	.page {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-6);
+		padding-top: var(--space-2);
+	}
+
 	.banner {
+		margin: 0 0 var(--space-4);
 		padding: var(--space-3) var(--space-4);
-		margin-bottom: var(--space-4);
+		border-radius: var(--radius);
 		background: color-mix(in srgb, var(--coral) 15%, var(--surface));
-		border-color: transparent;
+	}
+
+	.hosts {
+		margin: 0 0 var(--space-1);
+		color: var(--text-muted);
 	}
 
 	h1 {
-		margin: 0;
+		margin: 0 0 var(--space-4);
+		font-size: clamp(1.9rem, 6vw, 2.5rem);
+		line-height: 1.15;
 		overflow-wrap: anywhere;
 	}
 
 	.facts {
+		list-style: none;
+		margin: 0;
+		padding: 0;
 		display: grid;
 		gap: var(--space-3);
-		margin: 0;
 	}
 
-	.facts dt {
-		font-size: 0.85rem;
-		color: var(--text-muted);
+	.facts li {
+		display: grid;
+		grid-template-columns: 1.5rem 1fr;
+		gap: var(--space-2);
+		align-items: start;
+		line-height: 1.45;
 	}
 
-	.facts dd {
-		margin: 0;
-	}
-
-	.facts a {
-		display: inline-block;
-		margin-top: var(--space-1);
-	}
-
-	.description {
-		white-space: pre-line;
-		overflow-wrap: anywhere;
-	}
-
-	h2 {
-		margin: 0;
-	}
-
-	.card p {
-		margin: 0;
-	}
-
-	.registered {
-		font-weight: 600;
+	.facts li > :global(svg) {
+		margin-top: 0.05rem;
 		color: var(--accent);
 	}
 
-	.success {
+	.description {
+		margin: 0;
+		white-space: pre-line;
+		overflow-wrap: anywhere;
+		line-height: 1.6;
+		font-size: 1.05rem;
+	}
+
+	/* The one place to act: a soft, raised block instead of a form-like frame. */
+	.join {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+		padding: var(--space-6) var(--space-4);
+		border-radius: calc(var(--radius) * 1.5);
+		background: var(--surface);
+		box-shadow: 0 6px 24px rgb(0 0 0 / 0.07);
+	}
+
+	@media (min-width: 40rem) {
+		.join {
+			padding: var(--space-6);
+		}
+	}
+
+	.join h2 {
+		margin: 0;
+		font-size: 1.4rem;
+	}
+
+	.join p {
+		margin: 0;
+		line-height: 1.55;
+	}
+
+	.yes {
+		font-size: 1.3rem;
+		font-weight: 700;
+		color: var(--accent);
+	}
+
+	.notice {
 		padding: var(--space-3);
 		border-radius: var(--radius);
 		background: var(--accent-soft);
@@ -229,6 +303,14 @@
 		align-self: flex-start;
 	}
 
+	.quiet-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		gap: 0 var(--space-4);
+		margin-top: calc(-1 * var(--space-2));
+	}
+
 	.withdraw summary {
 		list-style: none;
 	}
@@ -237,7 +319,7 @@
 		display: none;
 	}
 
-	.withdraw[open] summary {
-		margin-bottom: var(--space-3);
+	.withdraw[open] {
+		flex-basis: 100%;
 	}
 </style>

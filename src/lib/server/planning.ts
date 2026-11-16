@@ -53,7 +53,7 @@ export function stayOf(
 		const pickupTimes = to.pickups
 			.map((p) => p.time?.getTime())
 			.filter((t): t is number => t !== undefined);
-		if (to.mode === 'transit' && pickupTimes.length) {
+		if (pickupTimes.length) {
 			arrive = new Date(Math.min(...pickupTimes));
 		} else if (to.time) {
 			const minutes =
@@ -204,5 +204,8 @@ export function modeCounts(people: PlanningPerson[], direction: 'to' | 'from') {
 		none: 0
 	};
 	for (const p of people) counts[p.legs[direction]?.mode ?? 'none']++;
+	// "not specified" and "no travel details at all" mean the same to the organizers
+	counts.undecided += counts.none;
+	counts.none = 0;
 	return counts;
 }
