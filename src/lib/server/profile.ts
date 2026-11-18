@@ -1,5 +1,11 @@
 import { and, eq } from 'drizzle-orm';
-import { CONTACT_KINDS, normalizeContact, type ContactKind } from '../contacts.js';
+import {
+	CONTACT_KINDS,
+	normalizeContact,
+	normalizeContactLabel,
+	type ContactKind,
+	type ContactOption
+} from '../contacts.js';
 import { db } from './db/index.js';
 import { contact, place } from './db/schema.js';
 
@@ -13,11 +19,15 @@ export function parseName(value: FormDataEntryValue | null): string | null {
 	return name && name.length <= NAME_MAX ? name : null;
 }
 
-export function parseContact(form: FormData): { kind: ContactKind; value: string } | null {
+export function parseContact(form: FormData): ContactOption | null {
 	const kind = form.get('kind') as ContactKind;
 	if (!CONTACT_KINDS.includes(kind)) return null;
 	const value = normalizeContact(kind, String(form.get('value') ?? ''));
-	return value ? { kind, value } : null;
+	if (!value) return null;
+	if (kind !== 'other') return { kind, value, label: null };
+	// another messenger: which one is needed, or nobody knows what the ID is for
+	const label = normalizeContactLabel(String(form.get('contactLabel') ?? ''));
+	return label ? { kind, value, label } : null;
 }
 
 export type PlaceInput = { label: string; address: string; area: string; lat: number; lon: number };
@@ -48,7 +58,7 @@ export function listPlaces(userId: string) {
 	return db.select().from(place).where(eq(place.userId, userId)).orderBy(place.createdAt).all();
 }
 
-export function addContact(userId: string, input: { kind: ContactKind; value: string }) {
+export function addContact(userId: string, input: ContactOption) {
 	if (listContacts(userId).length >= MAX_CONTACTS) return false;
 	db.insert(contact)
 		.values({ userId, ...input })

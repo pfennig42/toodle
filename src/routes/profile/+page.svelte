@@ -2,10 +2,10 @@
 	import { enhance } from '$app/forms';
 	import { tick } from 'svelte';
 	import { m } from '#lib/paraglide/messages.js';
-	import { contactKindLabel } from '#lib/labels.js';
+	import { contactName } from '#lib/labels.js';
 	import { CONTACT_KINDS } from '#lib/contacts.js';
 	import AddressSearch from '#lib/components/AddressSearch.svelte';
-	import ContactKindSelect from '#lib/components/ContactKindSelect.svelte';
+	import ContactEntry from '#lib/components/ContactEntry.svelte';
 	import PushSettings from '#lib/components/PushSettings.svelte';
 	import type { PageProps } from './$types';
 
@@ -19,6 +19,7 @@
 	let editing = $state<PlaceDraft | null>(null);
 	let contactValue = $state('');
 	let contactKind = $state('phone');
+	let contactLabel = $state('');
 	let addingContact = $state(false);
 	let contactInput: HTMLInputElement | undefined = $state();
 	// No contact yet: the form is open right away. Otherwise behind "add another".
@@ -26,7 +27,10 @@
 
 	function openContactForm() {
 		// suggest a kind that isn't there yet
-		contactKind = CONTACT_KINDS.find((k) => !data.contacts.some((c) => c.kind === k)) ?? 'phone';
+		// suggest a kind that isn't there yet ("other" can be there several times)
+		contactKind =
+			CONTACT_KINDS.find((k) => k !== 'other' && !data.contacts.some((c) => c.kind === k)) ??
+			'other';
 		addingContact = true;
 		tick().then(() => contactInput?.focus());
 	}
@@ -57,6 +61,10 @@
 
 <svelte:head><title>{m.profile_title()} · {m.app_name()}</title></svelte:head>
 
+{#if data.back}
+	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- checked same-site path -->
+	<a class="back" href={data.back.href}>← {m.profile_back_to({ title: data.back.title })}</a>
+{/if}
 <h1>{m.profile_title()}</h1>
 
 <div class="stack-lg">
@@ -84,7 +92,7 @@
 			<ul class="list">
 				{#each data.contacts as c (c.id)}
 					<li>
-						<span><strong>{contactKindLabel(c.kind)}</strong> {c.value}</span>
+						<span><strong>{contactName(c)}</strong> {c.value}</span>
 						<form method="post" action="?/deleteContact" use:enhance>
 							<input type="hidden" name="id" value={c.id} />
 							<button class="btn small">{m.remove()}</button>
@@ -103,17 +111,17 @@
 						await update({ reset: false });
 						if (result.type === 'success') {
 							contactValue = '';
+							contactLabel = '';
 							addingContact = false;
 						}
 					}}
 			>
-				<ContactKindSelect bind:value={contactKind} />
-				<input
-					name="value"
-					aria-label={m.contact_value()}
+				<ContactEntry
+					bind:kind={contactKind}
 					bind:value={contactValue}
+					bind:label={contactLabel}
+					bind:input={contactInput}
 					required
-					bind:this={contactInput}
 				/>
 				<button class="btn">{m.add()}</button>
 				{#if addingContact}
@@ -333,5 +341,12 @@
 		margin-top: 0.1rem;
 		flex-shrink: 0;
 		accent-color: var(--accent);
+	}
+
+	.back {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--touch);
+		font-weight: 600;
 	}
 </style>

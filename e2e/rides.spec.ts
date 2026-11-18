@@ -70,7 +70,7 @@ test('participants find and connect rides; organizers assign them', async ({
 	const cards = drivers.locator('li.ride');
 	await expect(cards.first()).toContainText('Anna');
 	await expect(cards.first()).toContainText('liegt auf dem Weg');
-	await expect(cards.first().getByRole('link', { name: 'WhatsApp' })).toHaveAttribute(
+	await expect(cards.first().getByRole('link', { name: /^WhatsApp/ })).toHaveAttribute(
 		'href',
 		'https://wa.me/491701234567'
 	);
@@ -106,7 +106,11 @@ test('participants find and connect rides; organizers assign them', async ({
 	// Tim sees his ride and removes it again
 	const tim = await open('Tim');
 	await expect(tim.getByText('Du fährst bei Anna mit')).toBeVisible();
-	await tim.locator('.highlight').getByRole('button', { name: 'Lösen' }).click();
+	await expect(
+		tim.getByText('Sprecht Treffpunkt und Uhrzeit direkt miteinander ab:')
+	).toBeVisible();
+	await tim.screenshot({ path: testInfo.outputPath('03-passenger.png'), fullPage: true });
+	await tim.locator('.highlight').getByRole('button', { name: 'Doch nicht mitfahren' }).click();
 	await expect(tim.getByText('Du fährst bei Anna mit')).toHaveCount(0);
 
 	// Organizer: Tim is open again → assign him manually

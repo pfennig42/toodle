@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { m } from '#lib/paraglide/messages.js';
 	import type { PageProps } from './$types';
 
@@ -92,8 +93,13 @@
 			<span class="muted small">{m.login_forgot_hint()}</span>
 		</form>
 	{:else}
-		<h1>{m.login_title()}</h1>
-		<p class="muted">{m.login_intro()}</p>
+		{#if data.event}
+			<h1>{m.login_welcome_title({ title: data.event.title })}</h1>
+			<p class="muted">{m.login_welcome_intro()}</p>
+		{:else}
+			<h1>{m.login_title()}</h1>
+			<p class="muted">{m.login_intro()}</p>
+		{/if}
 
 		<form method="post" action="?/email" class="stack" use:enhance={submit}>
 			<input type="hidden" name="next" value={next ?? ''} />
@@ -111,6 +117,15 @@
 			{#if error}<p class="error" role="alert">{error}</p>{/if}
 			<button class="btn btn-primary" disabled={pending}>{m.login_continue()}</button>
 		</form>
+		{#if data.event}
+			<p class="alt">
+				<span class="muted">{m.login_guest_question()}</span>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved path plus query -->
+				<a href={resolve('/e/[slug]', { slug: data.event.slug }) + '?guest#registration'}
+					>{m.login_guest_link()}</a
+				>
+			</p>
+		{/if}
 	{/if}
 </section>
 

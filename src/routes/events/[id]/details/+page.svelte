@@ -23,6 +23,8 @@
 			values={form?.values ?? data.values}
 			errors={form?.errors ?? []}
 			submitLabel={m.save()}
+			savedVisibility={data.savedVisibility}
+			registrations={data.registrations}
 		/>
 	{/key}
 	{#if form?.saved}<p class="muted small saved" role="status">{m.saved()}</p>{/if}

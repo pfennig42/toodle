@@ -5,6 +5,7 @@
 import type { ContactKind } from '../contacts.js';
 import type { TravelDirection } from '../forms.js';
 import type { CarStatus, TravelMode } from '../registration.js';
+import type { RideVisibility } from '../ride-visibility.js';
 
 export const ROAD_FACTOR = 1.3;
 export const AVG_SPEED_KMH = 60;
@@ -158,6 +159,10 @@ export function bestMatch(
 export const timeFits = (m: Match | null) =>
 	!m || m.timeGapMin === null || Math.abs(m.timeGapMin) <= TIME_TOLERANCE_MIN;
 
+/** On the way and at a fitting time – what hint mails announce and "matched" events show. */
+export const isGoodMatch = (m: Match | null): m is Match =>
+	!!m && m.detourMin <= GOOD_DETOUR_MIN && timeFits(m);
+
 /* --------------------------------------------------------------------- views */
 
 export type PersonRef = Pick<Participant, 'registrationId' | 'name' | 'contacts'>;
@@ -290,6 +295,63 @@ export function buildDirectionView(
 	};
 }
 
+/* --------------------------------------------------------------- visibility */
+
+/** "matched" events show at most this many people per list – the best fits. */
+export const MATCHED_LIMIT = 8;
+
+export type RestrictedView = DirectionView & {
+	/** People left out of the lists (the participant only learns how many) */
+	hidden: { drivers: number; seekers: number };
+};
+
+/**
+ * What a participant may see of a direction view (docs/konzept.md 4.5, "Sichtbarkeit"). Organizers see
+ * everything, so they get `public`. The viewer's own trip and links always stay.
+ */
+export function restrictView(v: DirectionView, visibility: RideVisibility): RestrictedView {
+	let drivers = v.drivers;
+	let seekers = v.seekers;
+	if (visibility === 'internal') {
+		drivers = [];
+		seekers = [];
+	} else if (visibility === 'matched') {
+		const myDriverId = v.myDriver?.registrationId;
+		const mine = new Set(v.myPassengers.map((p) => p.registrationId));
+		// Seekers see drivers who could take them, drivers see seekers on their way – nobody else.
+		drivers =
+			v.role === 'driver'
+				? []
+				: v.drivers
+						.filter(
+							(d) =>
+								d.registrationId === myDriverId ||
+								(d.leg.carStatus === 'offering' && isGoodMatch(d.match))
+						)
+						.slice(0, MATCHED_LIMIT);
+		seekers =
+			v.role === 'driver'
+				? v.seekers
+						.filter((s) => mine.has(s.registrationId) || (!s.driver && isGoodMatch(s.match)))
+						.slice(0, MATCHED_LIMIT)
+				: [];
+		// Who rides with whom is nobody else's business here.
+		drivers = drivers.map((d) => ({
+			...d,
+			passengers: d.registrationId === myDriverId ? d.passengers : []
+		}));
+	}
+	return {
+		...v,
+		drivers,
+		seekers,
+		hidden: {
+			drivers: v.drivers.length - drivers.length,
+			seekers: v.seekers.length - seekers.length
+		}
+	};
+}
+
 /* ------------------------------------------------------------- permissions */
 
 export type LinkActor = { registrationId: string | null; isOrganizer: boolean };
@@ -299,6 +361,7 @@ export type LinkActor = { registrationId: string | null; isOrganizer: boolean };
  * - the passenger ("I ride with …") unless the car is full / not taking anyone,
  * - the driver ("I take …"),
  * - organizers, always.
+ * The visibility of the event is checked separately (`linkVisible`).
  */
 export function canLink(
 	actor: LinkActor,
@@ -313,6 +376,27 @@ export function canLink(
 	if (actor.isOrganizer) return true;
 	if (actor.registrationId === driver.registrationId) return true;
 	if (actor.registrationId === passenger.registrationId) return dLeg!.carStatus === 'offering';
+	return false;
+}
+
+/**
+ * Participants can only connect with people they are allowed to see: nobody in "internal"
+ * events (the organizers do it), only shown matches in "matched" events.
+ * `view` is the actor's own, already restricted view.
+ */
+export function linkVisible(
+	actor: LinkActor,
+	visibility: RideVisibility,
+	view: RestrictedView | null,
+	driverId: string,
+	passengerId: string
+): boolean {
+	if (actor.isOrganizer || visibility === 'public') return true;
+	if (visibility === 'internal' || !view) return false;
+	if (actor.registrationId === passengerId)
+		return view.drivers.some((d) => d.registrationId === driverId);
+	if (actor.registrationId === driverId)
+		return view.seekers.some((s) => s.registrationId === passengerId);
 	return false;
 }
 

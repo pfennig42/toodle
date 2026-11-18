@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFormDefinition } from './forms';
+import { linkLabel, normalizeLinkUrl, parseFormDefinition } from './forms';
 
 const travel = { type: 'travel', label: 'Anreise & Abreise', config: {} };
 
@@ -62,5 +62,63 @@ describe('parseFormDefinition', () => {
 	it('rejects unknown types and non-arrays', () => {
 		expect(parseFormDefinition([{ type: 'file', label: 'Upload' }]).ok).toBe(false);
 		expect(parseFormDefinition({}).ok).toBe(false);
+	});
+});
+
+describe('links on questions', () => {
+	it('adds https:// to bare addresses and keeps the text', () => {
+		const result = parseFormDefinition([
+			{
+				type: 'checkbox',
+				label: 'Ich habe die Datenschutzerklärung gelesen',
+				config: {
+					links: [
+						{ url: ' example.org/datenschutz ', text: ' Datenschutzerklärung ' },
+						{ url: 'https://example.org/agb', text: '' }
+					]
+				}
+			}
+		]);
+		expect(result.ok && result.fields[0].config.links).toEqual([
+			{ url: 'https://example.org/datenschutz', text: 'Datenschutzerklärung' },
+			{ url: 'https://example.org/agb', text: '' }
+		]);
+	});
+
+	it('drops an empty link', () => {
+		const result = parseFormDefinition([
+			{ type: 'short_text', label: 'Allergien', config: { links: [{ url: '  ', text: 'x' }] } }
+		]);
+		expect(result.ok && result.fields[0].config).toEqual({});
+	});
+
+	it('rejects anything but web addresses', () => {
+		for (const url of ['javascript:alert(1)', 'data:text/html,hi', 'ftp://x.org', 'kein link']) {
+			expect(
+				parseFormDefinition([
+					{ type: 'short_text', label: 'Q', config: { links: [{ url, text: '' }] } }
+				])
+			).toEqual({ ok: false, error: { kind: 'link', index: 0 } });
+		}
+	});
+
+	it('ignores links on the travel field', () => {
+		const result = parseFormDefinition([
+			{ ...travel, config: { links: [{ url: 'https://example.org', text: '' }] } }
+		]);
+		expect(result.ok && result.fields[0].config.links).toBeUndefined();
+	});
+
+	it('allows at most five links', () => {
+		const links = Array.from({ length: 6 }, (_, i) => ({ url: `example.org/${i}`, text: '' }));
+		expect(parseFormDefinition([{ type: 'checkbox', label: 'Q', config: { links } }])).toEqual({
+			ok: false,
+			error: { kind: 'link', index: 0 }
+		});
+	});
+
+	it('shows the host when there is no text', () => {
+		expect(linkLabel({ url: 'https://www.example.org/datenschutz', text: '' })).toBe('example.org');
+		expect(normalizeLinkUrl('http://example.org')).toBe('http://example.org/');
 	});
 });

@@ -22,5 +22,8 @@ export function contactHref(kind: ContactKind, value: string): string | null {
 			return `https://t.me/${value.replace(/^@/, '')}`;
 		case 'email':
 			return `mailto:${value}`;
+		case 'other':
+			// a link (e.g. https://matrix.to/#/@anna:example.org) opens; anything else is shown as text
+			return /^https:\/\/[^\s]+$/i.test(value) ? value : null;
 	}
 }

@@ -46,7 +46,7 @@ export function loadRideData(eventId: string): { participants: Participant[]; li
 		name: r.name ?? r.email.split('@')[0],
 		contacts: contacts
 			.filter((c) => c.userId === r.userId)
-			.map(({ kind, value }) => ({ kind, value })),
+			.map(({ kind, value, label }) => ({ kind, value, label })),
 		legs: Object.fromEntries(
 			legs
 				.filter((l) => l.registrationId === r.id)

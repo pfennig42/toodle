@@ -1,6 +1,7 @@
 import { CONTACT_KINDS } from '../../contacts.js';
 import { FIELD_TYPES, TRAVEL_DIRECTIONS, type FieldConfig } from '../../forms.js';
 import { CAR_STATUSES, TRAVEL_MODES, type AnswerValue } from '../../registration.js';
+import { RIDE_VISIBILITIES } from '../../ride-visibility.js';
 import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 const id = () =>
@@ -29,6 +30,11 @@ export const user = sqliteTable(
 		mailWithPush: integer('mail_with_push', { mode: 'boolean' }).notNull().default(false),
 		/** Secret for unsubscribe links in mails (work without logging in). */
 		unsubscribeToken: text('unsubscribe_token'),
+		/**
+		 * Set once the person has proven they own the address (magic link). Guests who register
+		 * without logging in get a "silent" account without it (docs/konzept.md 5).
+		 */
+		emailVerifiedAt: integer('email_verified_at', { mode: 'timestamp' }),
 		createdAt: createdAt()
 	},
 	(t) => [
@@ -73,6 +79,8 @@ export const contact = sqliteTable(
 			.references(() => user.id, { onDelete: 'cascade' }),
 		kind: text('kind', { enum: CONTACT_KINDS }).notNull(),
 		value: text('value').notNull(),
+		/** Name of the service for kind "other" (e.g. Threema) */
+		label: text('label'),
 		createdAt: createdAt()
 	},
 	(t) => [index('contact_user_idx').on(t.userId)]
@@ -136,6 +144,9 @@ export const event = sqliteTable(
 			.notNull()
 			.default(false),
 		capacity: integer('capacity'),
+		rideVisibility: text('ride_visibility', { enum: RIDE_VISIBILITIES })
+			.notNull()
+			.default('public'),
 		status: text('status', { enum: EVENT_STATUSES }).notNull().default('draft'),
 		createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
 		createdAt: createdAt(),
@@ -161,6 +172,25 @@ export const eventOrganizer = sqliteTable(
 		uniqueIndex('event_organizer_pk').on(t.eventId, t.userId),
 		index('event_organizer_user_idx').on(t.userId)
 	]
+);
+
+/**
+ * Events someone looked at while logged in – so the start page can offer to finish a
+ * registration that was begun (e.g. after a detour to the profile). Hidden again on request.
+ */
+export const eventVisit = sqliteTable(
+	'event_visit',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		eventId: text('event_id')
+			.notNull()
+			.references(() => event.id, { onDelete: 'cascade' }),
+		seenAt: integer('seen_at', { mode: 'timestamp' }).notNull(),
+		dismissedAt: integer('dismissed_at', { mode: 'timestamp' })
+	},
+	(t) => [uniqueIndex('event_visit_pk').on(t.userId, t.eventId)]
 );
 
 /** Single-use link to join the organizer team; id = SHA-256 of the token. */

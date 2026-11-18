@@ -83,7 +83,7 @@
 												<span>{p.name}</span>
 												<form method="post" action="?/unlink" use:enhance>
 													<input type="hidden" name="link" value={p.linkId} />
-													<button class="btn small">{m.rides_unlink()}</button>
+													<button class="unlink small">{m.rides_unlink()}</button>
 												</form>
 											</li>
 										{/each}
@@ -109,6 +109,23 @@
 </div>
 
 <style>
+	/* quiet, so it doesn't look like a main action next to the name */
+	.unlink {
+		min-height: var(--touch);
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--text-muted);
+		font: inherit;
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+		cursor: pointer;
+	}
+
+	.unlink:hover {
+		color: var(--danger);
+	}
+
 	h2,
 	h3 {
 		margin: 0;

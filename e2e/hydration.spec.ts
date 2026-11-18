@@ -11,9 +11,11 @@ test('input made before hydration survives', async ({ page, context }) => {
 	await page.goto('/events/new', { waitUntil: 'commit' });
 	await page.getByLabel('Titel', { exact: true }).fill('Früh getippt');
 	await page.getByLabel('Beginn', { exact: true }).fill('2030-05-01');
+	await page.getByLabel('Beginn: Uhrzeit angeben').click();
 	await page.getByLabel('Beginn: Uhrzeit (optional)').fill('10:00');
 	await page.waitForSelector('html[data-hydrated]');
 	await expect(page.getByLabel('Titel', { exact: true })).toHaveValue('Früh getippt');
-	await expect(page.getByLabel('Beginn', { exact: true })).toHaveValue('2030-05-01');
+	// after hydration the plain date input became the range calendar – the date carried over
+	await expect(page.getByRole('button', { name: /^Zeitraum/ })).toContainText('1. Mai 2030');
 	await expect(page.getByLabel('Beginn: Uhrzeit (optional)')).toHaveValue('10:00');
 });

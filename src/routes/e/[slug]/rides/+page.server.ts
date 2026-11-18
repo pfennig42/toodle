@@ -10,7 +10,9 @@ import {
 	canLink,
 	canUnlink,
 	isDriver,
-	isSeeker
+	isSeeker,
+	linkVisible,
+	restrictView
 } from '#lib/server/ride-matching.js';
 import { publicView } from '#lib/server/ride-view.js';
 import { getLink, linkRide, loadRideData, unlinkRide } from '#lib/server/rides.js';
@@ -35,6 +37,25 @@ function access(slug: string, userId: string) {
 const directionsOf = (eventId: string): TravelDirection[] =>
 	listFields(eventId).find((f) => f.type === 'travel')?.config.directions ?? [];
 
+/** The direction view as this person may see it – organizers see everything. */
+async function viewFor(
+	{ e, isOrganizer, data, me }: ReturnType<typeof access>,
+	direction: TravelDirection
+) {
+	const eventPoint = e.lat !== null && e.lon !== null ? { lat: e.lat, lon: e.lon } : null;
+	if (!eventPoint) return null;
+	const travel = await rideTravelTime(data.participants, eventPoint);
+	const full = buildDirectionView(
+		data.participants,
+		data.links,
+		me?.registrationId ?? null,
+		direction,
+		eventPoint,
+		travel
+	);
+	return restrictView(full, isOrganizer ? 'public' : e.rideVisibility);
+}
+
 export const load: PageServerLoad = async ({ params, locals, url }) => {
 	if (!locals.user) redirect(303, `/login?next=${encodeURIComponent(url.pathname)}`);
 	const { e, isOrganizer, data, me } = access(params.slug, locals.user.id);
@@ -44,9 +65,8 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 	const directions = directionsOf(e.id);
 	const requested = url.searchParams.get('dir') as TravelDirection;
 	const direction = directions.includes(requested) ? requested : (directions[0] ?? 'to');
-	const eventPoint = e.lat !== null && e.lon !== null ? { lat: e.lat, lon: e.lon } : null;
-
-	const travel = await rideTravelTime(data.participants, eventPoint);
+	const visibility = isOrganizer ? ('public' as const) : e.rideVisibility;
+	const view = await viewFor({ e, isOrganizer, data, me }, direction);
 	const counts = Object.fromEntries(
 		directions.map((d) => [
 			d,
@@ -64,22 +84,21 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
 		direction,
 		counts,
 		isOrganizer,
+		/** What this viewer gets (organizers: everything) and what the event is set to */
+		visibility,
+		eventVisibility: e.rideVisibility,
 		registered: !!me,
 		myRegistrationId: me?.registrationId ?? null,
-		view: eventPoint
-			? publicView(
-					buildDirectionView(
-						data.participants,
-						data.links,
-						me?.registrationId ?? null,
-						direction,
-						eventPoint,
-						travel
-					)
-				)
-			: null,
+		view: view && { ...publicView(view), hidden: view.hidden },
+		// Unless rides are public, only the viewer's own links (who rides with whom stays private)
 		links: data.links
-			.filter((l) => l.direction === direction)
+			.filter(
+				(l) =>
+					l.direction === direction &&
+					(visibility === 'public' ||
+						l.driverRegistrationId === me?.registrationId ||
+						l.passengerRegistrationId === me?.registrationId)
+			)
 			.map(({ id, driverRegistrationId, passengerRegistrationId }) => ({
 				id,
 				driverRegistrationId,
@@ -94,18 +113,25 @@ const dirParam = (v: FormDataEntryValue | null): TravelDirection | null =>
 export const actions: Actions = {
 	link: async ({ params, locals, request }) => {
 		if (!locals.user) redirect(303, '/login');
-		const { e, isOrganizer, data, me } = access(params.slug, locals.user.id);
+		const ctx = access(params.slug, locals.user.id);
+		const { e, isOrganizer, data, me } = ctx;
 		const form = await request.formData();
 		const direction = dirParam(form.get('direction'));
 		const driver = data.participants.find((p) => p.registrationId === form.get('driver'));
 		const passenger = data.participants.find((p) => p.registrationId === form.get('passenger'));
+		const actor = { registrationId: me?.registrationId ?? null, isOrganizer };
+		if (!direction || !canLink(actor, driver, passenger, direction))
+			return fail(403, { error: 'forbidden' as const });
+		// Only with people this participant actually sees (event visibility)
 		if (
-			!direction ||
-			!canLink(
-				{ registrationId: me?.registrationId ?? null, isOrganizer },
-				driver,
-				passenger,
-				direction
+			!isOrganizer &&
+			e.rideVisibility !== 'public' &&
+			!linkVisible(
+				actor,
+				e.rideVisibility,
+				await viewFor(ctx, direction),
+				driver!.registrationId,
+				passenger!.registrationId
 			)
 		)
 			return fail(403, { error: 'forbidden' as const });

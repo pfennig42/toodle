@@ -1,6 +1,6 @@
 /** Organizer view of all registrations of an event (docs/konzept.md 4.6). */
 import { and, asc, eq, inArray } from 'drizzle-orm';
-import type { ContactKind } from '../contacts.js';
+import type { ContactOption } from '../contacts.js';
 import type { TravelDirection } from '../forms.js';
 import type { AnswerValue, CarStatus, TravelMode } from '../registration.js';
 import { db } from './db/index.js';
@@ -41,7 +41,7 @@ export type OrgaParticipant = {
 	comment: string;
 	createdAt: Date;
 	updatedAt: Date;
-	contacts: { kind: ContactKind; value: string }[];
+	contacts: ContactOption[];
 	answers: Record<string, AnswerValue>;
 	legs: OrgaLeg[];
 };
@@ -116,7 +116,7 @@ export function listParticipants(eventId: string): OrgaParticipant[] {
 		updatedAt: r.updatedAt,
 		contacts: contacts
 			.filter((c) => c.userId === r.userId)
-			.map(({ kind, value }) => ({ kind, value })),
+			.map(({ kind, value, label }) => ({ kind, value, label })),
 		answers: Object.fromEntries(
 			answers.filter((a) => a.registrationId === r.id).map((a) => [a.fieldId, a.value])
 		),

@@ -18,6 +18,11 @@ export const variables = defineEnvVars({
 		description: 'Photon-compatible geocoding API used for the address search.',
 		schema: (value) => value || 'https://photon.komoot.io'
 	},
+	TILE_URL: {
+		description:
+			'Map tiles ({z}/{x}/{y}), fetched through the app so visitors stay anonymous. Default: OpenStreetMap.',
+		schema: (value) => value || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+	},
 	ORIGIN: {
 		description: 'Public URL of the app, e.g. https://toodle.lu – used for links in mails.',
 		schema: (value) => (value || 'http://localhost:5173').replace(/\/+$/, '')

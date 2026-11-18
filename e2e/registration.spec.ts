@@ -68,24 +68,36 @@ test('participant looks for a ride with alternative pick-up points, edits and wi
 		.getByRole('radio', { name: /Suche Mitfahrt/ })
 		.click();
 	await expect(leg(page, 'Anreise').getByText('📍 Zuhause')).toBeVisible();
-	await expect(leg(page, 'Anreise').getByLabel('An welchem Tag?')).toHaveValue(
-		/^\d{4}-\d{2}-\d{2}$/
-	); // event's first day
-	await leg(page, 'Anreise').getByRole('button', { name: '+ Adresse oder Bahnhof' }).click();
+	// the event's first day as text – a date field only on request; times wait behind "+ Uhrzeit"
+	await expect(leg(page, 'Anreise').getByRole('button', { name: 'Tag ändern' })).toBeVisible();
+	await expect(leg(page, 'Anreise').locator('input[type="date"]')).toHaveCount(0);
+	await expect(leg(page, 'Anreise').locator('input[type="time"]')).toHaveCount(0);
+	await leg(page, 'Anreise')
+		.getByRole('button', { name: '+ weiterer Ort (z. B. Bahnhof)' })
+		.click();
 	await leg(page, 'Anreise')
 		.getByPlaceholder('Adresse oder Bahnhof suchen …')
 		.fill('Waldheim Bahnhof');
 	await leg(page, 'Anreise')
 		.getByRole('button', { name: /Waldheim Bahnhof/ })
 		.click();
-	await leg(page, 'Anreise').getByLabel('Uhrzeit (optional)').nth(1).fill('16:40');
-	await leg(page, 'Anreise').getByRole('button', { name: '+ Adresse oder Bahnhof' }).click();
+	await leg(page, 'Anreise').getByRole('button', { name: '+ Uhrzeit' }).click();
+	await leg(page, 'Anreise')
+		.getByLabel(/ca\. \(optional\)/)
+		.nth(1)
+		.fill('16:40');
+	await leg(page, 'Anreise')
+		.getByRole('button', { name: '+ weiterer Ort (z. B. Bahnhof)' })
+		.click();
 	await leg(page, 'Anreise').getByPlaceholder('Adresse oder Bahnhof suchen …').fill('Talhausen');
 	await leg(page, 'Anreise')
 		.getByRole('button', { name: /Talhausen Bf/ })
 		.click();
 
-	// The return trip took over the arrival …
+	// The return trip took over the arrival – just one line …
+	await expect(page.getByText(/↩ Rückfahrt genauso/)).toBeVisible();
+	await expect(leg(page, 'Abreise')).toHaveCount(0);
+	await page.getByRole('button', { name: 'anders zurück?' }).click();
 	await expect(leg(page, 'Abreise').getByRole('radio', { name: /Suche Mitfahrt/ })).toBeChecked();
 	await expect(leg(page, 'Abreise').getByText('Talhausen Bf')).toBeVisible();
 	// … until changed: by car, already full → where from / when don't matter
@@ -120,6 +132,10 @@ test('participant looks for a ride with alternative pick-up points, edits and wi
 
 	// Edit: car has room again – values are prefilled
 	await page.getByRole('button', { name: 'Anmeldung bearbeiten' }).click();
+	// the contact given in the form now comes from the profile: shown with name and e-mail, as text
+	await expect(page.getByText('Erreichbar über:')).toBeVisible();
+	await expect(page.locator('#registration .contacts')).toContainText('Signal +491701234567');
+	await expect(page.getByRole('group', { name: /Wie erreichen dich andere/ })).toHaveCount(0);
 	await expect(leg(page, 'Anreise').getByText('Talhausen Bf', { exact: true })).toBeVisible();
 	await leg(page, 'Abreise').getByRole('radio', { name: 'Ja' }).click();
 	// now the start matters – the saved place is suggested
@@ -173,9 +189,8 @@ test('full events and passed deadlines', async ({ page, context, browser }) => {
 	await leg(page, 'Anreise')
 		.getByRole('radio', { name: /Keine Angabe/ })
 		.click();
-	await leg(page, 'Abreise')
-		.getByRole('radio', { name: /Keine Angabe/ })
-		.click();
+	// the return trip follows ("same way back")
+	await expect(page.getByText(/↩ Rückfahrt genauso/)).toBeVisible();
 	await page.getByRole('radio', { name: 'Alles' }).check();
 	await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
 	await expect(page.getByText('✓ Du bist dabei!')).toBeVisible();

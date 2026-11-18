@@ -126,7 +126,8 @@ function matchLine(n: MatchNotice): string {
 /** Current matches for one person (used in the confirmation mail). */
 async function matchesFor(e: Event, registrationId: string, now = new Date()) {
 	const point = eventPoint(e);
-	if (!point) return [];
+	// Internal rides: only the organizers match people, participants see no one else.
+	if (!point || e.rideVisibility === 'internal') return [];
 	const { participants, links } = loadRideData(e.id);
 	const dirs = openDirections(travelDirections(e.id), e, now);
 	const travel = await rideTravelTime(participants, point);
@@ -155,7 +156,15 @@ const path = (url: string) => url.slice(ORIGIN.length) || '/';
 /* ------------------------------------------------------------ confirmation */
 
 /** After a new registration (or re-registration). Never throws. */
-export async function sendConfirmation(eventId: string, userId: string) {
+/**
+ * `guest`: registered without logging in. The mail is their only receipt, so it goes out even
+ * when confirmations are switched off – it also tells account owners that their address was used.
+ */
+export async function sendConfirmation(
+	eventId: string,
+	userId: string,
+	{ guest = false }: { guest?: boolean } = {}
+) {
 	try {
 		const e = db.select().from(event).where(eq(event.id, eventId)).get();
 		const u = getUser(userId);
@@ -169,7 +178,7 @@ export async function sendConfirmation(eventId: string, userId: string) {
 		// Matches that exist now are shown in this mail – no separate hint mail for them later.
 		const matches = await matchesFor(e, reg.id);
 		for (const n of matches) record(u.id, e.id, 'ride_match', matchRef(n), false);
-		if (!u.notifyConfirmation) return;
+		if (!u.notifyConfirmation && !guest) return;
 		record(u.id, e.id, 'confirmation', `${reg.id}:${Date.now()}`, true);
 
 		const legs = db.select().from(travelLeg).where(eq(travelLeg.registrationId, reg.id)).all();
@@ -190,6 +199,7 @@ export async function sendConfirmation(eventId: string, userId: string) {
 						.join(' · ')
 				);
 			const after: string[] = [];
+			if (guest) after.push(m.mail_confirm_guest_hint());
 			if (matches.length) {
 				after.push(
 					matches.some((n) => n.role === 'seeker')
@@ -336,7 +346,7 @@ export async function notifyRideLink(
 async function rideMatchMails(e: Event, now: Date) {
 	const point = eventPoint(e);
 	const dirs = openDirections(travelDirections(e.id), e, now);
-	if (!point || !dirs.length) return 0;
+	if (!point || !dirs.length || e.rideVisibility === 'internal') return 0;
 	const { participants, links } = loadRideData(e.id);
 	const travel = await rideTravelTime(participants, point);
 	const notices = rideMatchNotices(participants, links, point, dirs, travel);

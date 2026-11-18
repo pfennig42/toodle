@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { m } from '#lib/paraglide/messages.js';
-	import type { FieldConfig, FieldType } from '#lib/forms.js';
+	import { linkLabel, type FieldConfig, type FieldType } from '#lib/forms.js';
 	import type { AnswerValue } from '#lib/registration.js';
 
 	let {
@@ -78,6 +78,20 @@
 		{/if}
 	{/if}
 	{#if field.help}<span class="muted small">{field.help}</span>{/if}
+	{#if field.config.links?.length}
+		<!-- e.g. the privacy policy: opens in a new tab, so nothing typed so far is lost -->
+		<span class="field-links">
+			{#each field.config.links as link, i (i)}
+				<!-- eslint-disable svelte/no-navigation-without-resolve -- external address -->
+				<a class="small" href={link.url} target="_blank" rel="noopener noreferrer"
+					>{linkLabel(link)}&nbsp;<span aria-hidden="true">↗</span><span class="visually-hidden"
+						>{m.opens_in_new_tab()}</span
+					></a
+				>
+				<!-- eslint-enable svelte/no-navigation-without-resolve -->
+			{/each}
+		</span>
+	{/if}
 	{#if error}
 		<span class="error small">
 			{error === 'required' ? m.answer_error_required() : m.answer_error_invalid()}
@@ -86,6 +100,12 @@
 </div>
 
 <style>
+	.field-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-1) var(--space-4);
+	}
+
 	.choices {
 		gap: 0;
 	}

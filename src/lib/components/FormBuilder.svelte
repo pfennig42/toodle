@@ -4,15 +4,25 @@
 	import {
 		FIELD_TYPES,
 		hasOptions,
+		normalizeLinkUrl,
 		MAX_FIELDS,
+		MAX_LINKS,
 		type FieldDef,
+		type FieldLink,
 		type FieldType,
 		type TravelDirection
 	} from '#lib/forms.js';
-	import { fieldTypeLabel } from '#lib/field-labels.js';
+	import { fieldTypeIcon, fieldTypeLabel } from '#lib/field-labels.js';
 	import FormPreview from './FormPreview.svelte';
 
-	type Draft = FieldDef & { key: string; optionsText: string };
+	type Draft = FieldDef & {
+		key: string;
+		optionsText: string;
+		links: LinkDraft[];
+		/** extras are tucked away until asked for (or already filled) */
+		showHelp: boolean;
+	};
+	type LinkDraft = { key: string; url: string; text: string };
 
 	let {
 		initial,
@@ -30,8 +40,18 @@
 		...f,
 		config: { ...f.config },
 		key: f.id ?? `new-${++counter}`,
-		optionsText: (f.config.options ?? []).join('\n')
+		optionsText: (f.config.options ?? []).join('\n'),
+		links: (f.config.links ?? []).map((l) => ({ ...l, key: `link-${++counter}` })),
+		showHelp: !!f.help
 	});
+	/** The links as guests will see them – empty and not (yet) valid addresses left out */
+	function linksOf(d: Draft): FieldLink[] {
+		return d.links.flatMap((l) => {
+			const url = normalizeLinkUrl(l.url);
+			return url && url !== 'invalid' ? [{ url, text: l.text.trim() }] : [];
+		});
+	}
+	const badLink = (l: LinkDraft) => normalizeLinkUrl(l.url) === 'invalid';
 	const optionsOf = (d: Draft) =>
 		d.optionsText
 			.split('\n')
@@ -82,11 +102,20 @@
 				label: d.label,
 				help: d.help,
 				required: d.required,
-				config: hasOptions(d.type)
-					? { options: optionsOf(d) }
-					: d.type === 'travel'
+				config:
+					d.type === 'travel'
 						? { directions: d.config.directions }
-						: {}
+						: {
+								...(hasOptions(d.type) ? { options: optionsOf(d) } : {}),
+								// sent as typed – the server normalizes and rejects bad addresses
+								...(d.links.some((l) => l.url.trim())
+									? {
+											links: d.links
+												.filter((l) => l.url.trim())
+												.map(({ url, text }) => ({ url, text }))
+										}
+									: {})
+							}
 			}))
 		)
 	);
@@ -106,7 +135,10 @@
 			: null,
 		questions: questions.map((q) => ({
 			...q,
-			config: hasOptions(q.type) ? { options: optionsOf(q) } : q.config
+			config: {
+				...(hasOptions(q.type) ? { options: optionsOf(q) } : {}),
+				links: linksOf(q)
+			}
 		}))
 	});
 
@@ -137,6 +169,32 @@
 		focusLabel(draft.key);
 	}
 
+	const focusLater = (id: string) =>
+		requestAnimationFrame(() => document.getElementById(id)?.focus());
+
+	/** Extras of a question: an explanation and links – shown when asked for, removable again. */
+	function addHelp(q: Draft) {
+		q.showHelp = true;
+		focusLater(`help-${q.key}`);
+	}
+
+	function removeHelp(q: Draft) {
+		q.help = '';
+		q.showHelp = false;
+		focusLater(`add-help-${q.key}`);
+	}
+
+	function addLink(q: Draft) {
+		const link = { key: `link-${++counter}`, url: '', text: '' };
+		q.links.push(link);
+		focusLater(`url-${link.key}`);
+	}
+
+	function removeLink(q: Draft, index: number) {
+		q.links.splice(index, 1);
+		focusLater(`add-link-${q.key}`);
+	}
+
 	function move(index: number, delta: number) {
 		const target = index + delta;
 		if (target < 0 || target >= questions.length) return;
@@ -160,6 +218,7 @@
 			if (!q.label.trim()) found[q.key] = m.builder_error_need_label();
 			else if (hasOptions(q.type) && optionsOf(q).length < 2)
 				found[q.key] = m.builder_error_need_options();
+			else if (q.links.some(badLink)) found[q.key] = m.builder_error_need_link();
 		}
 		problems = found;
 		const first = questions.find((q) => found[q.key]);
@@ -324,10 +383,80 @@
 							<input type="checkbox" bind:checked={q.required} />
 							{m.builder_must_answer()}
 						</label>
-						<details class="more" open={!!q.help}>
-							<summary>{m.builder_guest_help()}</summary>
-							<input bind:value={q.help} maxlength="500" aria-label={m.builder_guest_help()} />
-						</details>
+						{#if q.showHelp}
+							<div class="removable">
+								<label class="field">
+									<span>{m.builder_guest_help()} <span class="muted">({m.optional()})</span></span>
+									<input
+										id="help-{q.key}"
+										bind:value={q.help}
+										maxlength="500"
+										placeholder={m.builder_help_placeholder()}
+									/>
+								</label>
+								<button
+									type="button"
+									class="icon-btn remove"
+									onclick={() => removeHelp(q)}
+									aria-label={m.builder_remove_help()}
+									title={m.builder_remove_help()}>✕</button
+								>
+							</div>
+						{/if}
+						{#each q.links as link, li (link.key)}
+							<div class="removable link-row">
+								<div class="link-fields">
+									<label class="field">
+										<span>{m.builder_link_url()}</span>
+										<!-- not type="url": that would refuse "example.org" (we add https:// ourselves) -->
+										<input
+											id="url-{link.key}"
+											bind:value={link.url}
+											inputmode="url"
+											autocomplete="url"
+											maxlength="500"
+											placeholder="https://…"
+											aria-invalid={problems[q.key] && badLink(link) ? 'true' : undefined}
+										/>
+									</label>
+									<label class="field">
+										<span>{m.builder_link_text()} <span class="muted">({m.optional()})</span></span>
+										<input
+											bind:value={link.text}
+											maxlength="120"
+											placeholder={m.builder_link_text_placeholder()}
+										/>
+									</label>
+								</div>
+								<button
+									type="button"
+									class="icon-btn remove"
+									onclick={() => removeLink(q, li)}
+									aria-label={m.builder_remove_link()}
+									title={m.builder_remove_link()}>✕</button
+								>
+							</div>
+						{/each}
+						{#if !q.showHelp || q.links.length < MAX_LINKS}
+							<div class="extras">
+								{#if !q.showHelp}
+									<button
+										type="button"
+										class="extra"
+										id="add-help-{q.key}"
+										onclick={() => addHelp(q)}>+ {m.builder_add_help()}</button
+									>
+								{/if}
+								{#if q.links.length < MAX_LINKS}
+									<button
+										type="button"
+										class="extra"
+										id="add-link-{q.key}"
+										onclick={() => addLink(q)}>+ {m.builder_add_link()}</button
+									>
+								{/if}
+							</div>
+						{/if}
 						<div class="editor-foot">
 							<span class="tools">
 								<button
@@ -375,8 +504,11 @@
 				{#each QUESTION_TYPES as type (type)}
 					<li>
 						<button type="button" class="type" onclick={() => add(type)}>
-							<span class="type-name">{fieldTypeLabel(type)}</span>
-							<span class="muted small">{EXAMPLES[type as Exclude<FieldType, 'travel'>]()}</span>
+							<span class="type-icon" aria-hidden="true">{fieldTypeIcon(type)}</span>
+							<span class="type-text">
+								<span class="type-name">{fieldTypeLabel(type)}</span>
+								<span class="muted small">{EXAMPLES[type as Exclude<FieldType, 'travel'>]()}</span>
+							</span>
 						</button>
 					</li>
 				{/each}
@@ -611,16 +743,53 @@
 		accent-color: var(--accent);
 	}
 
-	.more summary {
-		cursor: pointer;
-		min-height: var(--touch);
+	/* optional extras of a question: clearly buttons, but quieter than the main actions */
+	.extras {
 		display: flex;
-		align-items: center;
-		color: var(--text-muted);
+		flex-wrap: wrap;
+		gap: var(--space-2);
 	}
 
-	.more input {
-		width: 100%;
+	.extra {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--touch);
+		padding: 0 var(--space-4);
+		border: 1px dashed var(--border);
+		border-radius: 999px;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.extra:hover,
+	.extra:focus-visible {
+		border-style: solid;
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	/* a field (or pair of fields) with its remove button at the end */
+	.removable {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: var(--space-2);
+		align-items: end;
+	}
+
+	/* address and text of one link belong together – visible also when stacked on phones */
+	.link-row {
+		padding: var(--space-3);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+	}
+
+	.link-fields {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+		gap: var(--space-3);
 	}
 
 	/* adding a question: a gentle menu, no toolbox */
@@ -652,24 +821,30 @@
 		font-weight: 600;
 	}
 
+	/* one tile per question type: icon, name and an example – clearly something to tap */
 	.types {
 		list-style: none;
 		margin: 0;
 		padding: 0;
 		display: grid;
-		gap: var(--space-1);
+		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+		gap: var(--space-2);
+	}
+
+	.types li {
+		display: flex;
 	}
 
 	.type {
 		display: flex;
-		flex-direction: column;
 		align-items: flex-start;
-		gap: 0.1rem;
+		gap: var(--space-3);
 		width: 100%;
-		padding: var(--space-2) var(--space-3);
-		border: 0;
+		min-height: var(--touch);
+		padding: var(--space-3);
+		border: 1px solid var(--border);
 		border-radius: var(--radius);
-		background: none;
+		background: var(--surface);
 		color: inherit;
 		font: inherit;
 		text-align: left;
@@ -678,7 +853,31 @@
 
 	.type:hover,
 	.type:focus-visible {
-		background: var(--surface);
+		border-color: var(--accent);
+		background: var(--accent-soft);
+	}
+
+	.type:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 0;
+	}
+
+	.type-icon {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		width: 2.25rem;
+		height: 2.25rem;
+		border-radius: 0.5rem;
+		background: var(--surface-2);
+		color: var(--accent);
+		font-weight: 700;
+	}
+
+	.type-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
 	}
 
 	.type-name {

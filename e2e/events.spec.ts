@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
-import { localDateTime, loginAs, mockGeocoder, ready, slugOf } from './helpers';
+import { localDateTime, loginAs, mockGeocoder, pickDates, ready, slugOf } from './helpers';
 
 /** The tabs of the event management area. */
 const tab = (page: Page, name: string) =>
@@ -39,12 +39,10 @@ test('organizer creates, builds, publishes, duplicates and deletes an event', as
 
 	// Create
 	await page.getByLabel('Titel', { exact: true }).fill('Sommerfreizeit 2027');
-	// date only – the time is optional
-	await page.getByLabel('Beginn', { exact: true }).fill(localDateTime(30, 18).slice(0, 10));
-	await page.getByLabel('Beginn', { exact: true }).blur();
-	await expect(page.getByLabel('Ende', { exact: true })).toHaveValue(
-		localDateTime(32, 18).slice(0, 10)
-	); // suggested end
+	// a weekend in the range calendar – the time of day is optional
+	await ready(page);
+	await pickDates(page, localDateTime(30, 18).slice(0, 10), localDateTime(32, 18).slice(0, 10));
+	await page.getByLabel('Beginn: Uhrzeit angeben').click();
 	await page.getByLabel('Beginn: Uhrzeit (optional)').fill('18:00');
 	await page.getByLabel('Name des Ortes').fill('Jugendhof Waldheim');
 	await page.locator('#event-address').fill('Waldheim');
@@ -83,10 +81,44 @@ test('organizer creates, builds, publishes, duplicates and deletes an event', as
 	await press(row);
 	await expect(page.getByLabel('Deine Frage')).toHaveCount(0);
 
+	// a yes/no question with a link, e.g. to the privacy policy
+	await page.getByText('+ Frage hinzufügen').click();
+	await page.getByRole('button', { name: /Ja oder Nein/ }).click();
+	await page.getByLabel('Deine Frage').fill('Ich habe die Datenschutzerklärung gelesen');
+	// explanation and links can be added – and removed again
+	await page.getByRole('button', { name: '+ Erklärung' }).click();
+	await page.getByLabel('Erklärung für deine Gäste').fill('wird gleich wieder entfernt');
+	await page.getByRole('button', { name: 'Erklärung entfernen' }).click();
+	await expect(page.getByLabel('Erklärung für deine Gäste')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: '+ Erklärung' })).toBeFocused();
+	await page.getByRole('button', { name: '+ Link' }).click();
+	await expect(page.getByLabel('Link-Adresse')).toBeFocused();
+	await page.getByLabel('Link-Adresse').fill('kein link');
+	await page.getByRole('button', { name: 'Fertig', exact: true }).click();
+	await expect(page.getByText('Das ist keine gültige Webadresse.')).toBeVisible();
+	await page.getByLabel('Link-Adresse').fill('example.org/datenschutz');
+	await page.getByLabel('Linktext').fill('Datenschutzerklärung');
+	await page.getByRole('button', { name: '+ Link' }).click();
+	await page.getByLabel('Link-Adresse').nth(1).fill('example.org/agb');
+	await page.getByRole('button', { name: '+ Link' }).click();
+	await page.getByLabel('Link-Adresse').nth(2).fill('example.org/weg');
+	await page.getByRole('button', { name: 'Link entfernen' }).nth(2).click();
+	await expect(page.getByLabel('Link-Adresse')).toHaveCount(2);
+	await press(page.getByRole('button', { name: 'OK', exact: true }));
+
 	// the preview shows the form as guests see it
 	await page.getByRole('button', { name: 'Vorschau' }).click();
 	await expect(page.getByText('So sieht es für deine Gäste aus:')).toBeVisible();
 	await expect(page.getByText('Vegetarisch')).toBeVisible();
+	await expect(page.getByRole('link', { name: /^Datenschutzerklärung/ })).toHaveAttribute(
+		'href',
+		'https://example.org/datenschutz'
+	);
+	await expect(page.getByRole('link', { name: /^example\.org/ })).toHaveAttribute(
+		'href',
+		'https://example.org/agb'
+	);
+	await expect(page.locator('a[href="https://example.org/weg"]')).toHaveCount(0);
 	await page.getByRole('button', { name: 'Bearbeiten' }).click();
 	await shot('03-setup-form');
 
@@ -237,9 +269,11 @@ test('drafts and other people’s events are not accessible', async ({ page, con
 	await page.goto('/events/new');
 	await ready(page);
 	await page.getByLabel('Titel', { exact: true }).fill('Geheimer Entwurf');
-	await page.getByLabel('Beginn', { exact: true }).fill(localDateTime(10, 10).slice(0, 10));
+	// a single day: the same day twice
+	await pickDates(page, localDateTime(10, 10).slice(0, 10), localDateTime(10, 16).slice(0, 10));
+	await page.getByLabel('Beginn: Uhrzeit angeben').click();
 	await page.getByLabel('Beginn: Uhrzeit (optional)').fill('10:00');
-	await page.getByLabel('Ende', { exact: true }).fill(localDateTime(10, 16).slice(0, 10));
+	await page.getByLabel('Ende: Uhrzeit angeben').click();
 	await page.getByLabel('Ende: Uhrzeit (optional)').fill('16:00');
 	// the address is required when creating – the event is published at the end
 	await page.getByRole('button', { name: 'Weiter zum Anmeldeformular' }).click();

@@ -69,7 +69,8 @@ Normales Formular mit Feldtypen:
 Felder können Pflicht oder optional sein, haben eine Reihenfolge und einen Hilfetext. Das Formular ist bewusst
 schlicht – keine Bedingungslogik im MVP.
 
-Der Name und die E-Mail kommen immer aus dem Account und sind keine Formularfelder.
+Der Name und die E-Mail sind keine Formularfelder: Sie kommen aus dem Account – bei Gästen (ohne Login, siehe 5)
+stehen sie ganz am Ende des Formulars.
 
 ### 4.4 Feldtyp „Reise“
 
@@ -78,6 +79,14 @@ Der Name und die E-Mail kommen immer aus dem Account und sind keine Formularfeld
 > Uhrzeit optional). Beim Auto kommt zuerst „Nimmst du Leute mit?“ – Ort und Zeit nur, wenn ja. Der Tag ist aus der
 > Veranstaltung vorbelegt, die Uhrzeit optional. Die Abreise übernimmt die Anreise, bis man sie ändert. Ältere
 > ÖV-Angaben werden weiter angezeigt und abgeglichen.
+> Offen ist nur, was alle beantworten (Wie? · Platz frei? · Von wo?). Tag als Text („Fr., 27. Nov. · ändern“),
+> Uhrzeit, Notiz und weitere Abholorte hinter „+ …“; der erste Ort wird still als „Zuhause“ gespeichert (keine
+> Bezeichnung, kein Häkchen). Solange die Abreise der Anreise folgt, ist sie nur eine Zeile („↩ Rückfahrt genauso ·
+> anders zurück?“).
+> Darunter eine eingeklappte Karte („Auf der Karte zeigen“, Leaflet erst beim Öffnen geladen): ★ Veranstaltungsort und die
+> gewählten Orte nummeriert; ein Klick in die Karte sucht die Adresse dort (Photon `/reverse`) und fügt sie als
+> weiteren Abholort bzw. als Startort hinzu. Kacheln laufen über `/api/tiles` (`TILE_URL`, Cache im Speicher), damit
+> die IP-Adressen der Gäste nicht beim Kachel-Server landen.
 
 Erfasst Hin- und Rückfahrt getrennt. Pro Richtung:
 
@@ -133,6 +142,18 @@ Bestätigungsschritt; dient dem Überblick („Lea ist versorgt“). Setzen kön
 
 Wer zugeordnet ist, verschwindet in den Listen anderer nach unten bzw. wird als „versorgt“ markiert.
 
+**Sichtbarkeit** (pro Veranstaltung, `event.ride_visibility`). Die Orga sieht immer alles; Teilnehmende je nach Stufe:
+
+| Stufe                      | Teilnehmende sehen                                                                                                                                                                                                                                                                                   | Zuordnen                                         |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| Öffentlich (Standard)      | alle Fahrenden und Suchenden                                                                                                                                                                                                                                                                         | Beteiligte + Orga                                |
+| Halböffentlich (`matched`) | nur passende Fahrten: Suchende sehen Fahrende mit freiem Platz, Fahrende sehen offene Suchende, jeweils Umweg ≤ 20 min und passende Zeit (dasselbe Kriterium wie die Hinweis-Mails), höchstens 8. Dazu die eigenen Zuordnungen. Der Rest nur als Anzahl; wer bei anderen mitfährt, bleibt verborgen. | Beteiligte (nur mit angezeigten Treffern) + Orga |
+| Intern                     | nur die eigene Fahrt und die von der Orga zugeteilte Person (mit Kontakt); keine Treffer-Hinweise                                                                                                                                                                                                    | nur Orga                                         |
+
+Gefiltert wird auf dem Server, bevor Daten an den Browser gehen. Ab 100 erwarteten Personen (Max. Teilnehmende) oder
+Anmeldungen empfiehlt toodle „Halböffentlich“. Wird die Sichtbarkeit nach den ersten Anmeldungen erweitert, muss die
+Orga das bestätigen. Im Anmeldeformular steht, wer die eigene Fahrt sieht.
+
 ### 4.6 Orga-Übersicht
 
 - Teilnehmendenliste mit allen Formularantworten, filter-/sortierbar, **CSV-Export**.
@@ -159,8 +180,15 @@ pro Art im Profil oder per Link ohne Login (Bestätigung per Knopf, damit Mail-S
 ## 5. Anmelde-Ablauf
 
 1. Person öffnet den öffentlichen Link → sieht Event-Infos.
-2. Nicht eingeloggt: Login vor dem Formular – E-Mail + Passwort oder E-Mail → Magic Link → zurück zum Formular
-   (Account wird beim ersten Magic Link angelegt).
+2. Nicht eingeloggt: „Willkommen zu ‹Event›!“ – wer ein Konto hat oder eines möchte, gibt die E-Mail an (Passwort
+   oder Magic Link → zurück zum Formular). **Oder ohne Anmeldung weiter:** erst das Formular, ganz am Ende Name und
+   E-Mail. Keine Bestätigung per Mail – nur die Info „Wir haben dir alle Infos zur Veranstaltung geschickt“.
+   - Dahinter steht ein **stilles Konto** (ohne Passwort, E-Mail unbestätigt); das Gerät bleibt eingeloggt. So
+     funktionieren Mitfahr-Ansicht, Ändern und Hinweise wie bei allen anderen.
+   - Gibt es zur E-Mail schon ein Konto, wird die Anmeldung diesem zugeordnet, das Gerät aber **nicht** eingeloggt
+     (eine eingetippte Adresse beweist nichts). Eine bestehende Anmeldung lässt sich so nicht überschreiben.
+   - Der erste Magic Link bestätigt die Adresse: andere Sitzungen und ein vorher gesetztes Passwort verfallen – wer
+     mit fremder Adresse ein Konto angelegt hat, verliert den Zugang.
 3. Formular ausfüllen; im Reise-Feld werden gespeicherte Orte angeboten, neue Orte können direkt im Profil
    gespeichert werden.
 4. Nach dem Absenden: direkt die Mitfahr-Ansicht.
@@ -206,6 +234,7 @@ session         id, user_id, expires_at
 
 event           id, slug, title, description, location_label, lat, lon,
                 starts_at, ends_at, timezone, registration_deadline, capacity,
+                ride_visibility (public|matched|internal),
                 status (draft|open|closed|archived), created_by, created_at
 event_organizer event_id, user_id
 form_field      id, event_id, position, type, label, help, required, options(json)
@@ -246,7 +275,8 @@ Bewertungen/Profile mit Reputation · Marketing-Seiten.
 
 ## 11. Entscheidungen
 
-- Login vor dem Formular, per Passwort oder Magic Link.
+- ~~Login vor dem Formular~~ → Anmeldung auch ohne Login: Formular zuerst, Name + E-Mail am Ende, stilles Konto
+  dahinter (siehe 5). Login weiterhin per Passwort oder Magic Link.
 - Teilnehmende sehen nur die Mitfahr-Ansicht, keine vollständige Namensliste.
 - Mails über Brevo (SMTP-Relay).
 - Caddy läuft als Container unter `/srv/edge` mit `network_mode: host`; Domain `toodle.lu`.

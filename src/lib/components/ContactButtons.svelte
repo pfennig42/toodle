@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { ContactKind } from '#lib/contacts.js';
+	import type { ContactOption } from '#lib/contacts.js';
 	import { contactHref } from '#lib/contact-links.js';
-	import { contactKindLabel } from '#lib/labels.js';
+	import { contactName } from '#lib/labels.js';
 	import { m } from '#lib/paraglide/messages.js';
 
-	let { contacts }: { contacts: { kind: ContactKind; value: string }[] } = $props();
+	let { contacts }: { contacts: ContactOption[] } = $props();
 </script>
 
 {#if contacts.length}
@@ -14,10 +14,10 @@
 			{#if href}
 				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external app link -->
 				<a class="btn small" {href} target="_blank" rel="noopener noreferrer"
-					>{contactKindLabel(c.kind)}</a
+					>{contactName(c)}{#if c.kind !== 'other'}<span class="value">{c.value}</span>{/if}</a
 				>
 			{:else}
-				<span class="btn small static">{contactKindLabel(c.kind)}: {c.value}</span>
+				<span class="btn small static">{contactName(c)}<span class="value">{c.value}</span></span>
 			{/if}
 		{/each}
 	</div>
@@ -30,6 +30,14 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--space-2);
+	}
+
+	/* the number or ID itself – so it's clear what the button does, and it can be copied */
+	.value {
+		margin-left: 0.4em;
+		font-weight: 400;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
 	}
 
 	.static {

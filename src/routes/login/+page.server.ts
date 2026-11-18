@@ -8,6 +8,7 @@ import { DUMMY_HASH, verifyPassword } from '#lib/server/auth/crypto.js';
 import { createRateLimiter } from '#lib/server/auth/rate-limit.js';
 import { normalizeEmail, safeNext } from '#lib/server/auth/validation.js';
 import { renderMail, sendMail } from '#lib/server/mail.js';
+import { getEventBySlug, registrationState } from '#lib/server/events.js';
 import type { Actions, PageServerLoad } from './$types';
 
 const QUARTER_HOUR = 15 * 60 * 1000;
@@ -21,8 +22,19 @@ const lookupPerIp = createRateLimiter(30, QUARTER_HOUR);
 export const load: PageServerLoad = ({ locals, url }) => {
 	const next = safeNext(url.searchParams.get('next'));
 	if (locals.user) redirect(303, next ?? '/');
-	return { next };
+	return { next, event: invitingEvent(next) };
 };
+
+/**
+ * Coming from an event's page: welcome people to it and offer to go on without an account
+ * (docs/konzept.md 5). Only for events open for registration.
+ */
+function invitingEvent(next: string | null) {
+	const slug = next?.match(/^\/e\/([^/?#]+)/)?.[1];
+	const e = slug ? getEventBySlug(slug) : null;
+	if (!e || registrationState(e) !== 'open') return null;
+	return { title: e.title, slug: e.slug };
+}
 
 async function sendLoginLink(email: string, next: string | null, origin: string) {
 	const token = createLoginToken(email, next);

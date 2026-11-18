@@ -5,12 +5,17 @@
 		FORM_MODES,
 		MAX_PICKUPS,
 		type LegInput,
+		type GeoPoint,
 		type PlaceChoice,
 		type TravelMode
 	} from '#lib/registration.js';
+	import { getLocale } from '#lib/paraglide/runtime.js';
+	import { formatShortDate } from '#lib/date-range.js';
 	import AddressSearch from './AddressSearch.svelte';
+	import Icon from './Icon.svelte';
+	import LegMap from './LegMap.svelte';
 
-	type SavedPlace = { id: string; label: string; area: string };
+	type SavedPlace = { id: string; label: string; area: string; lat?: number; lon?: number };
 
 	let {
 		leg = $bindable(),
@@ -22,7 +27,7 @@
 		leg: LegInput;
 		direction: TravelDirection;
 		savedPlaces: SavedPlace[];
-		near: { lat: number; lon: number } | null;
+		near: { lat: number; lon: number; label?: string } | null;
 		error?: string | null;
 	} = $props();
 
@@ -93,10 +98,59 @@
 	}
 	const pickupClock = (time: string) => (time.length > 10 ? time.slice(11, 16) : '');
 
+	/*
+	 * Only what everybody answers is open; the rest waits behind "+ …" (docs/konzept.md 4.4).
+	 * Extras already filled in start open. The day is prefilled from the event – shown as text.
+	 */
+	const locale = getLocale();
+	let editDay = $state(false);
+	let showClock = $state(leg.time.length > 10);
+	let showNote = $state(!!leg.carNote);
+	let showPickupTimes = $state(leg.pickups.some((p) => !!p.time));
+
+	function reveal(set: () => void, id: string) {
+		set();
+		requestAnimationFrame(() => document.getElementById(id)?.focus());
+	}
+
 	const savedById = (id: string | undefined) => savedPlaces.find((p) => p.id === id);
 	const unusedSaved = $derived(
 		savedPlaces.filter((sp) => !leg.pickups.some((p) => p.savedId === sp.id))
 	);
+
+	/* The map: the event and the places chosen so far. A click there adds a place too. */
+	type Spot = { lat: number; lon: number; label: string };
+	const spotOf = (point: GeoPoint | null, savedId?: string): Spot | null => {
+		if (point) return { lat: point.lat, lon: point.lon, label: point.name || point.address };
+		const sp = savedById(savedId);
+		return sp?.lat != null && sp.lon != null ? { lat: sp.lat, lon: sp.lon, label: sp.label } : null;
+	};
+	const venue = $derived(near ? { lat: near.lat, lon: near.lon, label: near.label ?? '' } : null);
+	const spots = $derived(
+		(looking
+			? leg.pickups.map((p) => spotOf(p.point, p.savedId))
+			: leg.place?.kind === 'custom'
+				? [spotOf(leg.place.point)]
+				: leg.place?.kind === 'saved'
+					? [spotOf(null, leg.place.id)]
+					: []
+		).filter((s): s is Spot => !!s)
+	);
+	const pickupsFull = $derived(
+		leg.pickups.length >= MAX_PICKUPS && leg.pickups.every((p) => p.point || p.savedId)
+	);
+
+	function pickOnMap(point: GeoPoint) {
+		if (!looking) {
+			const label = leg.place?.kind === 'custom' ? leg.place.label : (stash?.label ?? '');
+			leg.place = { kind: 'custom', label, point, save: true };
+			return;
+		}
+		// an empty search is filled first, otherwise one more place
+		const empty = leg.pickups.find((p) => !p.point && !p.savedId);
+		if (empty) empty.point = point;
+		else if (leg.pickups.length < MAX_PICKUPS) leg.pickups.push({ point, time: '' });
+	}
 
 	// Server errors are hidden as soon as the problem is fixed in the form.
 	const placeOk = $derived(
@@ -125,6 +179,37 @@
 						: null
 	);
 </script>
+
+<!-- The day comes prefilled from the event: a line of text – a date field only on request. -->
+{#snippet dayLine()}
+	{#if editDay || !day}
+		<label class="field day">
+			<span>{m.travel_day()}</span>
+			<input
+				id="day-{direction}"
+				type="date"
+				bind:value={() => day, (v) => setWhen(v, leg.mode === 'car' ? clock : '')}
+			/>
+		</label>
+	{:else}
+		<p class="day-line">
+			<span class="day-text"><Icon name="calendar" size={18} />{formatShortDate(day, locale)}</span>
+			<button
+				type="button"
+				class="more"
+				aria-label={m.travel_change_day()}
+				onclick={() => reveal(() => (editDay = true), `day-${direction}`)}
+				>{m.travel_change()}</button
+			>
+		</p>
+	{/if}
+{/snippet}
+
+{#snippet mapBox(hint: string, canPick = true)}
+	{#if venue || spots.length}
+		<LegMap event={venue} {spots} onpick={pickOnMap} {hint} {canPick} />
+	{/if}
+{/snippet}
 
 <fieldset class="leg" aria-describedby={errorText ? `leg-error-${direction}` : undefined}>
 	<legend>{isTo ? m.travel_to() : m.travel_from()}</legend>
@@ -187,62 +272,66 @@
 					>
 				{/if}
 
+				<!-- No name, no "save" checkbox: the first place is kept as "Zuhause" in the profile
+				     (renamed there if need be), other places only belong to this trip. -->
 				{#if leg.place?.kind === 'custom'}
-					<div class={savedPlaces.length ? 'subcard stack-sm' : 'stack-sm'}>
-						<AddressSearch
-							id="place-{direction}"
-							bind:value={leg.place.point}
-							hiddenInputs={false}
+					<AddressSearch id="place-{direction}" bind:value={leg.place.point} hiddenInputs={false} />
+				{/if}
+				{@render mapBox(m.map_hint_start())}
+
+				{@render dayLine()}
+				{#if showClock}
+					<label class="field clock">
+						<span>{isTo ? m.travel_time_to() : m.travel_time_from()}</span>
+						<input
+							id="clock-{direction}"
+							type="time"
+							disabled={!day}
+							bind:value={() => clock, (v) => setWhen(day, v)}
 						/>
-						<label class="field">
-							<span>{m.place_label()} <span class="muted">({m.optional()})</span></span>
-							<input
-								bind:value={leg.place.label}
-								maxlength="40"
-								placeholder={m.travel_place_label_placeholder()}
-							/>
-						</label>
-						{#if savedPlaces.length < 10}
-							<label class="check">
-								<input type="checkbox" bind:checked={leg.place.save} />
-								{m.travel_place_save()}
-							</label>
+					</label>
+				{/if}
+				{#if showNote}
+					<label class="field">
+						<span>{m.car_note()} <span class="muted">({m.optional()})</span></span>
+						<input
+							id="note-{direction}"
+							bind:value={leg.carNote}
+							maxlength="200"
+							placeholder={m.car_note_placeholder()}
+						/>
+					</label>
+				{/if}
+				{#if !showClock || !showNote}
+					<div class="extras">
+						{#if !showClock}
+							<button
+								type="button"
+								class="more"
+								onclick={() => reveal(() => (showClock = true), `clock-${direction}`)}
+								>{m.event_add_time()}</button
+							>
+						{/if}
+						{#if !showNote}
+							<button
+								type="button"
+								class="more"
+								onclick={() => reveal(() => (showNote = true), `note-${direction}`)}
+								>{m.travel_add_note()}</button
+							>
 						{/if}
 					</div>
 				{/if}
-
-				<!-- When: the day is prefilled from the event, the time is optional -->
-				<div class="when">
-					<label class="field">
-						<span>{isTo ? m.travel_time_to() : m.travel_time_from()}</span>
-						<input type="date" bind:value={() => day, (v) => setWhen(v, clock)} />
-					</label>
-					<label class="field">
-						<span>{m.event_time()} <span class="muted">({m.optional()})</span></span>
-						<input type="time" disabled={!day} bind:value={() => clock, (v) => setWhen(day, v)} />
-					</label>
-				</div>
-
-				<label class="field">
-					<span>{m.car_note()} <span class="muted">({m.optional()})</span></span>
-					<input bind:value={leg.carNote} maxlength="200" placeholder={m.car_note_placeholder()} />
-				</label>
 			{:else}
 				<p class="muted small">{m.car_status_hint()}</p>
 			{/if}
 		</div>
 	{:else if looking}
 		<div class="details">
-			<label class="field day">
-				<span>{m.travel_day()}</span>
-				<input type="date" bind:value={() => day, (v) => setWhen(v, '')} />
-			</label>
-
 			<div class="pickups">
 				<p class="label">{isTo ? m.pickup_where_to() : m.pickup_where_from()}</p>
-				<p class="muted small">{m.pickup_where_hint()}</p>
 				{#each leg.pickups as pickup, i (pickup)}
-					<div class="point">
+					<div class="point" class:with-time={showPickupTimes}>
 						<span class="small muted or">{i === 0 ? '' : m.summary_or()}</span>
 						<div class="point-place">
 							{#if pickup.savedId}
@@ -263,57 +352,109 @@
 								/>
 							{/if}
 						</div>
-						<input
-							type="time"
-							class="point-time"
-							aria-label={`${m.event_time()} (${m.optional()})`}
-							title={isTo ? m.pickup_time_to() : m.pickup_time_from()}
-							disabled={!day}
-							bind:value={() => pickupClock(pickup.time), (v) => (pickup.time = join(day, v))}
-						/>
-						<button
-							type="button"
-							class="icon-btn"
-							aria-label={m.remove()}
-							title={m.remove()}
-							onclick={() => leg.pickups.splice(i, 1)}>✕</button
-						>
+						{#if showPickupTimes}
+							<input
+								type="time"
+								id="pickup-time-{direction}-{i}"
+								class="point-time"
+								aria-label={`${isTo ? m.pickup_time_to() : m.pickup_time_from()} (${m.optional()})`}
+								title={isTo ? m.pickup_time_to() : m.pickup_time_from()}
+								disabled={!day}
+								bind:value={() => pickupClock(pickup.time), (v) => (pickup.time = join(day, v))}
+							/>
+						{/if}
+						{#if leg.pickups.length > 1}
+							<button
+								type="button"
+								class="icon-btn"
+								aria-label={m.remove()}
+								title={m.remove()}
+								onclick={() => leg.pickups.splice(i, 1)}>✕</button
+							>
+						{/if}
 					</div>
 				{/each}
 				{#if leg.pickups.length < MAX_PICKUPS}
-					<div class="adds">
+					<div class="extras">
 						{#each unusedSaved as sp (sp.id)}
 							<button
 								type="button"
-								class="btn small"
+								class="more"
 								onclick={() => leg.pickups.push({ point: null, savedId: sp.id, time: '' })}
 								>+ {sp.label}</button
 							>
 						{/each}
 						<button
 							type="button"
-							class="btn small"
-							onclick={() => leg.pickups.push({ point: null, time: '' })}
-							>+ {m.pickup_add_search()}</button
+							class="more"
+							onclick={() =>
+								reveal(
+									() => leg.pickups.push({ point: null, time: '' }),
+									`pickup-${direction}-${leg.pickups.length}`
+								)}>+ {leg.pickups.length ? m.pickup_add_more() : m.pickup_add_search()}</button
 						>
 					</div>
 				{/if}
+				{@render mapBox(pickupsFull ? m.map_full() : m.map_hint_pickup(), !pickupsFull)}
 			</div>
+
+			{@render dayLine()}
+			{#if !showPickupTimes}
+				<div class="extras">
+					<button
+						type="button"
+						class="more"
+						onclick={() => reveal(() => (showPickupTimes = true), `pickup-time-${direction}-0`)}
+						>{m.pickup_add_times()}</button
+					>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </fieldset>
 
 <style>
-	.when {
-		display: grid;
-		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-		gap: var(--space-2);
-		align-items: end;
+	/* quiet extras: "+ Uhrzeit", "+ Notiz", "ändern" */
+	.extras {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 var(--space-4);
+		margin-top: calc(-1 * var(--space-2));
 	}
 
-	.when input {
-		width: 100%;
-		min-width: 0;
+	.more {
+		display: inline-flex;
+		align-items: center;
+		min-height: var(--touch);
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--accent);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.day-line {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0 var(--space-3);
+		margin: 0;
+	}
+
+	.day-text {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
+	.day-text :global(svg) {
+		color: var(--text-muted);
+	}
+
+	.clock input {
+		max-width: 10rem;
 	}
 
 	.field-label {
@@ -403,9 +544,13 @@
 
 	.point {
 		display: grid;
-		grid-template-columns: 2rem minmax(0, 1fr) 6.5rem auto;
+		grid-template-columns: 2rem minmax(0, 1fr) auto;
 		gap: var(--space-2);
 		align-items: center;
+	}
+
+	.point.with-time {
+		grid-template-columns: 2rem minmax(0, 1fr) 6.5rem auto;
 	}
 
 	.or {
@@ -414,7 +559,10 @@
 
 	.saved {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
+		align-content: center;
+		column-gap: 0.3em;
 		min-height: var(--touch);
 		padding: 0 var(--space-3);
 		border-radius: var(--radius);
@@ -442,19 +590,22 @@
 		color: var(--text);
 	}
 
-	.adds {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-2);
-	}
-
 	.day input {
 		max-width: 14rem;
 	}
 
 	/* phones: the place gets the full width, time and remove go below */
 	@media (max-width: 30rem) {
-		.point {
+		.point,
+		.point.with-time {
+			grid-template-columns: minmax(0, 1fr) auto;
+		}
+
+		.or {
+			display: none;
+		}
+
+		.point.with-time {
 			grid-template-columns: 6.5rem 1fr auto;
 			grid-template-areas:
 				'place place place'
@@ -463,39 +614,16 @@
 			border-bottom: 1px dashed var(--border);
 		}
 
-		.or {
-			display: none;
-		}
-
-		.point-place {
+		.with-time .point-place {
 			grid-area: place;
 		}
 
-		.point-time {
+		.with-time .point-time {
 			grid-area: time;
 		}
 
-		.point .icon-btn {
+		.with-time .icon-btn {
 			grid-area: remove;
 		}
-	}
-
-	.stack-sm {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-	}
-
-	.check {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--space-2);
-		min-height: var(--touch);
-	}
-
-	.check input {
-		width: 1.25rem;
-		height: 1.25rem;
-		accent-color: var(--accent);
 	}
 </style>

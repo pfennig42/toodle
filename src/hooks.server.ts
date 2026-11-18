@@ -39,7 +39,8 @@ const handleTheme: Handle = ({ event, resolve }) => {
 };
 
 /** Pages that need a logged-in user. */
-const PROTECTED = ['/onboarding', '/profile', '/api', '/events', '/invite'];
+// The address search (/api/geocode) is open: guests register without an account.
+const PROTECTED = ['/onboarding', '/profile', '/api/push', '/events', '/invite'];
 /** Pages a not-yet-onboarded user may visit. */
 const ONBOARDING_ALLOWED = ['/onboarding', '/logout', '/auth', '/api', '/healthz', '/unsubscribe'];
 

@@ -4,7 +4,8 @@ import { db } from '#lib/server/db/index.js';
 import { user } from '#lib/server/db/schema.js';
 import { destroyOtherSessions, destroySession } from '#lib/server/auth/index.js';
 import { hashPassword } from '#lib/server/auth/crypto.js';
-import { isValidPassword, normalizeEmail } from '#lib/server/auth/validation.js';
+import { isValidPassword, normalizeEmail, safeNext } from '#lib/server/auth/validation.js';
+import { getEventBySlug } from '#lib/server/events.js';
 import {
 	addContact,
 	addPlace,
@@ -22,7 +23,14 @@ import { PREF_KINDS, setPreference } from '#lib/server/notifications.js';
 import { listDevices, removeSubscription } from '#lib/server/push.js';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ locals }) => {
+/** Came here from an event's registration: offer the way back (the event isn't lost). */
+function backTo(next: string | null) {
+	const slug = next?.match(/^\/e\/([^/?#]+)/)?.[1];
+	const e = slug ? getEventBySlug(slug) : null;
+	return e && e.status !== 'draft' ? { title: e.title, href: next! } : null;
+}
+
+export const load: PageServerLoad = ({ locals, url }) => {
 	const me = locals.user!;
 	const prefs = db
 		.select({
@@ -35,10 +43,11 @@ export const load: PageServerLoad = ({ locals }) => {
 		.where(eq(user.id, me.id))
 		.get()!;
 	return {
+		back: backTo(safeNext(url.searchParams.get('next'))),
 		prefs,
 		devices: listDevices(me.id).map(({ id, label }) => ({ id, label })),
 		profile: { name: me.name ?? '', email: me.email, hasPassword: me.hasPassword },
-		contacts: listContacts(me.id).map(({ id, kind, value }) => ({ id, kind, value })),
+		contacts: listContacts(me.id).map(({ id, kind, value, label }) => ({ id, kind, value, label })),
 		maxContacts: MAX_CONTACTS,
 		places: listPlaces(me.id).map(({ id, label, address, area, lat, lon }) => ({
 			id,

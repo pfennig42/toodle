@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { m } from '#lib/paraglide/messages.js';
@@ -16,6 +17,32 @@
 
 {#if data.events}
 	<h1 class="hello">{m.dashboard_hello({ name: firstName })}</h1>
+
+	{#if data.unfinished.length}
+		<!-- begun, not finished: first, because there's something left to do -->
+		<section class="block">
+			<h2>{m.dashboard_unfinished()}</h2>
+			<p class="muted small lead">{m.dashboard_unfinished_hint()}</p>
+			<ul class="cards">
+				{#each data.unfinished as event (event.id)}
+					<li class="unfinished">
+						<EventCard
+							{event}
+							href={resolve('/e/[slug]', { slug: event.slug }) + '#registration'}
+						/>
+						<form method="post" action="?/dismiss" use:enhance>
+							<input type="hidden" name="eventId" value={event.id} />
+							<button
+								class="icon-btn"
+								aria-label={m.dashboard_unfinished_dismiss({ title: event.title })}
+								title={m.dashboard_unfinished_dismiss({ title: event.title })}>✕</button
+							>
+						</form>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
 
 	{#if data.registered.length}
 		<section class="block">
@@ -116,6 +143,34 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-3);
+	}
+
+	.lead {
+		margin: calc(-1 * var(--space-2)) 0 var(--space-3);
+	}
+
+	/* the card, and a quiet "hide" next to it */
+	.unfinished {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		gap: var(--space-1);
+	}
+
+	.icon-btn {
+		min-width: var(--touch);
+		min-height: var(--touch);
+		border: 0;
+		border-radius: var(--radius);
+		background: none;
+		color: var(--text-muted);
+		font: inherit;
+		cursor: pointer;
+	}
+
+	.icon-btn:hover {
+		background: var(--surface-2);
+		color: var(--text);
 	}
 
 	.empty {

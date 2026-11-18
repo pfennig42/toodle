@@ -99,6 +99,7 @@ export function duplicateEvent(source: Event, userId: string, titleSuffix: strin
 			timezone: source.timezone,
 			registrationDeadline: source.registrationDeadline,
 			capacity: source.capacity,
+			rideVisibility: source.rideVisibility,
 			startHasTime: source.startHasTime,
 			endHasTime: source.endHasTime,
 			deadlineHasTime: source.deadlineHasTime

@@ -87,6 +87,16 @@
 		</nav>
 	{/if}
 
+	{#if data.isOrganizer && data.eventVisibility !== 'public'}
+		<p class="card note small">
+			{data.eventVisibility === 'matched'
+				? m.rides_orga_note_matched()
+				: m.rides_orga_note_internal()}
+		</p>
+	{:else if data.visibility === 'matched'}
+		<p class="card note small">{m.rides_matched_note()}</p>
+	{/if}
+
 	<!-- My own trip -->
 	{#if data.registered}
 		<section class="card stack mine">
@@ -119,11 +129,13 @@
 				)}
 				<div class="highlight stack-sm">
 					<p><strong>{m.rides_you_ride_with({ name: v.myDriver.name })}</strong></p>
+					{#if v.myDriver.contacts.length}<p class="small">{m.rides_contact_hint()}</p>{/if}
 					<ContactButtons contacts={v.myDriver.contacts} />
 					{#if link}
+						<!-- quiet: undoing the ride must not look like the contact buttons -->
 						<form method="post" action="?/unlink" use:enhance>
 							<input type="hidden" name="link" value={link.id} />
-							<button class="btn small">{m.rides_unlink()}</button>
+							<button class="unlink small">{m.rides_unlink_passenger()}</button>
 						</form>
 					{/if}
 				</div>
@@ -144,7 +156,7 @@
 								{#if link}
 									<form method="post" action="?/unlink" use:enhance>
 										<input type="hidden" name="link" value={link.id} />
-										<button class="btn small">{m.rides_unlink()}</button>
+										<button class="unlink small">{m.rides_unlink_driver()}</button>
 									</form>
 								{/if}
 							</li>
@@ -195,7 +207,9 @@
 					{/each}
 				</ul>
 			{:else}
-				<p class="muted">{m.rides_no_seekers()}</p>
+				<p class="muted">
+					{data.visibility === 'matched' ? m.rides_no_matching_seekers() : m.rides_no_seekers()}
+				</p>
 			{/if}
 		</section>
 	{/snippet}
@@ -243,12 +257,18 @@
 					{/each}
 				</ul>
 			{:else}
-				<p class="muted">{m.rides_no_drivers()}</p>
+				<p class="muted">
+					{data.visibility === 'matched' ? m.rides_no_matching_drivers() : m.rides_no_drivers()}
+				</p>
 			{/if}
 		</section>
 	{/snippet}
 
-	{#if v.role === 'driver'}
+	{#if data.visibility === 'internal'}
+		<p class="card note">{m.rides_internal_note()}</p>
+	{:else if data.visibility === 'matched' && v.role === 'other'}
+		<p class="card note">{m.rides_matched_no_leg()}</p>
+	{:else if v.role === 'driver'}
 		{@render seekerList(m.rides_seekers_on_route(), m.rides_seekers_hint())}
 		{#if v.drivers.length}
 			<details class="more">
@@ -267,6 +287,12 @@
 				)}
 			</details>
 		{/if}
+	{/if}
+
+	{#if data.visibility === 'matched' && v.role !== 'other' && v.hidden.drivers + v.hidden.seekers > 0}
+		<p class="muted small hidden-count">
+			{m.rides_hidden({ count: v.hidden.drivers + v.hidden.seekers })}
+		</p>
 	{/if}
 
 	<p class="muted small privacy">{m.rides_privacy()}</p>
@@ -318,6 +344,17 @@
 		margin-top: var(--space-6);
 	}
 
+	.hidden-count {
+		margin-top: var(--space-4);
+	}
+
+	.note {
+		margin: 0 0 var(--space-4);
+		padding: var(--space-3) var(--space-4);
+		background: var(--surface-2);
+		border-color: transparent;
+	}
+
 	section + section,
 	.more {
 		margin-top: var(--space-6);
@@ -339,6 +376,23 @@
 
 	.highlight p {
 		margin: 0;
+	}
+
+	/* undoing a ride: a quiet text button, apart from the contact buttons */
+	.unlink {
+		min-height: var(--touch);
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--text-muted);
+		font: inherit;
+		text-decoration: underline;
+		text-underline-offset: 0.2em;
+		cursor: pointer;
+	}
+
+	.unlink:hover {
+		color: var(--danger);
 	}
 
 	.stack-sm {

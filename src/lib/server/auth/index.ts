@@ -116,8 +116,26 @@ export function consumeLoginToken(token: string): { user: User; next: string | n
 		const row = findUsableToken(token);
 		if (!row) return null;
 		tx.update(loginToken).set({ usedAt: new Date() }).where(eq(loginToken.id, row.id)).run();
+		const now = new Date();
 		let account = tx.select().from(user).where(eq(user.email, row.email)).get();
-		if (!account) account = tx.insert(user).values({ email: row.email }).returning().get();
+		if (!account) {
+			account = tx
+				.insert(user)
+				.values({ email: row.email, emailVerifiedAt: now })
+				.returning()
+				.get();
+		} else if (!account.emailVerifiedAt) {
+			// A silent guest account (docs/konzept.md 5): anyone could have typed this address. Now
+			// that the owner proved it, whoever created it loses access – sessions and any password
+			// set before go; registrations and profile stay.
+			tx.delete(session).where(eq(session.userId, account.id)).run();
+			account = tx
+				.update(user)
+				.set({ emailVerifiedAt: now, passwordHash: null })
+				.where(eq(user.id, account.id))
+				.returning()
+				.get();
+		}
 		return { user: account, next: row.next };
 	});
 }

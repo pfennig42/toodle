@@ -30,7 +30,18 @@ test('several ways to be reached can be saved in the profile', async ({ context,
 	await section.getByRole('button', { name: 'Abbrechen' }).click();
 	await expect(section.getByLabel('Nummer / Name')).toHaveCount(0);
 
-	// both stay after a reload
+	// another messenger: the name of the service is asked as well
+	await section.getByRole('button', { name: /Weiteren Kontaktweg hinzufügen/ }).click();
+	await section.getByRole('combobox').selectOption('other');
+	await expect(section.getByLabel('Welcher Dienst?')).toBeVisible();
+	await section.getByLabel('Welcher Dienst?').fill('Threema');
+	await section.getByLabel('Nummer / Name').fill('ECHO4242');
+	await section.getByRole('button', { name: 'Hinzufügen' }).click();
+	await expect(section.getByRole('listitem').filter({ hasText: 'ECHO4242' })).toContainText(
+		'Threema'
+	);
+
+	// all stay after a reload
 	await page.reload();
-	await expect(section.getByRole('listitem')).toHaveCount(2);
+	await expect(section.getByRole('listitem')).toHaveCount(3);
 });

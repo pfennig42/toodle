@@ -15,15 +15,31 @@
 	const ev = $derived(data.event);
 	const address = $derived(addressWithoutName(ev.locationName, ev.locationAddress));
 	const reg = $derived(data.registration?.status === 'active' ? data.registration : null);
-	const near = $derived(ev.lat !== null && ev.lon !== null ? { lat: ev.lat, lon: ev.lon } : null);
+	const near = $derived(
+		ev.lat !== null && ev.lon !== null
+			? { lat: ev.lat, lon: ev.lon, label: ev.locationName || ev.title }
+			: null
+	);
 	// Travel details stay editable after the deadline (plans change); answers don't.
 	const canEditTravel = $derived(
 		!!reg && (ev.state === 'open' || ev.state === 'deadline' || ev.state === 'closed')
 	);
 	const canRegister = $derived(ev.state === 'open' && !data.full);
+	// Guests: via "continue without logging in" – or back from the server with an error (a plain
+	// form post goes to "?/register" and loses "?guest" on the way).
+	const guestMode = $derived(!data.loggedIn && (data.guest || (!!form && 'guestName' in form)));
 	const showForm = $derived(
-		data.loggedIn && ((reg && editing && canEditTravel) || (!reg && canRegister))
+		(data.loggedIn && ((reg && editing && canEditTravel) || (!reg && canRegister))) ||
+			(guestMode && canRegister)
 	);
+	/** Guest whose address belongs to an existing account: registered, but not logged in here */
+	const guestDone = $derived(form && 'guestSaved' in form ? form.sentTo : null);
+	const sentTo = $derived(form && 'sentTo' in form ? form.sentTo : null);
+	const guestValues = $derived({
+		name: form && 'guestName' in form ? (form.guestName ?? '') : '',
+		email: form && 'guestEmail' in form ? (form.guestEmail ?? '') : '',
+		errors: form && 'guestErrors' in form ? (form.guestErrors ?? {}) : {}
+	});
 	const formErrors = $derived(
 		form && 'error' in form && form.error === 'invalid'
 			? { answers: form.answerErrors, travel: form.travelErrors, contact: !!form.contactError }
@@ -118,6 +134,18 @@
 	{/if}
 
 	<section class="join" id="registration">
+		{#if sentTo && !guestDone}
+			<p class="notice" role="status">{m.guest_sent_notice({ email: sentTo })}</p>
+		{/if}
+		{#if form && 'error' in form && form.error === 'guest_taken'}
+			<p class="notice" role="alert">
+				{m.guest_taken()}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- login with return path -->
+				<a href={loginHref}>{m.guest_taken_login()}</a>
+			</p>
+		{:else if form && 'error' in form && form.error === 'rate'}
+			<p class="error" role="alert">{m.login_error_rate()}</p>
+		{/if}
 		{#if form && 'saved' in form && form.wasRegistered}
 			<p class="notice" role="status">{m.registration_updated_notice()}</p>
 		{/if}
@@ -125,7 +153,15 @@
 			<p class="muted" role="status">{m.registration_withdrawn_notice()}</p>
 		{/if}
 
-		{#if reg && !editing}
+		{#if guestDone}
+			<div role="status">
+				<p class="yes">✓ {m.registration_you_are_registered()}</p>
+				<p>{m.guest_sent_notice({ email: guestDone })}</p>
+				<p class="muted">{m.guest_known_hint()}</p>
+			</div>
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- login with return path -->
+			<a class="btn align-start" href={loginHref}>{m.guest_known_login()}</a>
+		{:else if reg && !editing}
 			<div role="status">
 				<p class="yes">✓ {m.registration_you_are_registered()}</p>
 				<p class="muted">{m.tagline()}</p>
@@ -140,7 +176,10 @@
 			{#if !data.hasContact}
 				<p class="hint small">
 					{m.registration_no_contact_hint()}
-					<a href={resolve('/profile')}>{m.registration_add_contact()}</a>
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- resolved path plus query -->
+					<a href={resolve('/profile') + `?next=${encodeURIComponent(`/e/${ev.slug}`)}`}
+						>{m.registration_add_contact()}</a
+					>
 				</p>
 			{/if}
 			<a class="btn btn-primary align-start" href={resolve('/e/[slug]/rides', { slug: ev.slug })}
@@ -177,7 +216,10 @@
 				answerErrors={formErrors.answers}
 				travelErrors={formErrors.travel}
 				askContact={!data.hasContact}
+				contacts={data.contacts}
 				contactError={formErrors.contact}
+				rideVisibility={ev.rideVisibility}
+				guest={guestMode ? guestValues : null}
 				oncancel={reg ? () => (editing = false) : undefined}
 			/>
 		{:else if ev.state === 'open' && data.full}

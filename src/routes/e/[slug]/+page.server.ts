@@ -4,7 +4,13 @@ import { and, count, eq } from 'drizzle-orm';
 import { utcToZoned } from '#lib/datetime.js';
 import { COMMENT_MAX, type LegInput, type TravelInput } from '#lib/registration.js';
 import { db } from '#lib/server/db/index.js';
-import { eventOrganizer, registration, travelLeg, type Event } from '#lib/server/db/schema.js';
+import {
+	eventOrganizer,
+	registration,
+	travelLeg,
+	user,
+	type Event
+} from '#lib/server/db/schema.js';
 import {
 	getEventBySlug,
 	listFields,
@@ -22,7 +28,14 @@ import {
 	type FullRegistration
 } from '#lib/server/registrations.js';
 import { sendConfirmation } from '#lib/server/notifications.js';
+import { createSession, validateSession } from '#lib/server/auth/index.js';
+import { createRateLimiter } from '#lib/server/auth/rate-limit.js';
+import { guestAccount, parseGuest } from '#lib/server/guests.js';
+import { recordVisit } from '#lib/server/visits.js';
 import type { Actions, PageServerLoad } from './$types';
+
+/** Registering without an account creates accounts – keep that from being automated. */
+const guestsPerIp = createRateLimiter(10, 60 * 60 * 1000);
 
 function isOrganizer(eventId: string, userId: string | undefined) {
 	if (!userId) return false;
@@ -123,7 +136,7 @@ function defaultLeg(e: Event, saved: Saved, direction: 'to' | 'from'): LegInput 
 	};
 }
 
-export const load: PageServerLoad = ({ params, locals }) => {
+export const load: PageServerLoad = ({ params, locals, url }) => {
 	const me = locals.user;
 	const { e, organizer } = loadEvent(params.slug, me?.id);
 	const fields = listFields(e.id).map(({ id, type, label, help, required, config }) => ({
@@ -137,6 +150,8 @@ export const load: PageServerLoad = ({ params, locals }) => {
 	const state = registrationState(e);
 	const saved = me ? listPlaces(me.id) : [];
 	const reg = me ? getRegistration(e.id, me.id) : null;
+	// not registered yet: the start page offers to finish it later (e.g. after a detour)
+	if (me && !organizer && !reg && state === 'open') recordVisit(me.id, e.id);
 	const travelInput = reg ? toTravelInput(reg, e, saved) : {};
 	for (const dir of ['to', 'from'] as const) travelInput[dir] ??= defaultLeg(e, saved, dir);
 
@@ -159,6 +174,7 @@ export const load: PageServerLoad = ({ params, locals }) => {
 			endHasTime: e.endHasTime,
 			deadlineHasTime: e.deadlineHasTime,
 			capacity: e.capacity,
+			rideVisibility: e.rideVisibility,
 			state
 		},
 		fields,
@@ -173,8 +189,16 @@ export const load: PageServerLoad = ({ params, locals }) => {
 		full: me
 			? isFull(e, me.id)
 			: e.capacity !== null && countActiveRegistrations(e.id) >= e.capacity,
-		hasContact: me ? listContacts(me.id).length > 0 : true,
-		savedPlaces: saved.map(({ id, label, area }) => ({ id, label, area })),
+		// guests are asked for a contact option in the form, like accounts without one
+		hasContact: me ? listContacts(me.id).length > 0 : false,
+		/** shown (read-only) next to name and e-mail in the form */
+		contacts: me
+			? listContacts(me.id).map(({ kind, value, label }) => ({ kind, value, label }))
+			: [],
+		/** "Continue without logging in" – the form with name and e-mail at its end */
+		guest: !me && url.searchParams.has('guest'),
+		// own places only – with coordinates for the map
+		savedPlaces: saved.map(({ id, label, area, lat, lon }) => ({ id, label, area, lat, lon })),
 		registration: reg && {
 			status: reg.status,
 			comment: reg.comment,
@@ -195,22 +219,35 @@ export const load: PageServerLoad = ({ params, locals }) => {
 };
 
 export const actions: Actions = {
-	register: async ({ params, locals, request }) => {
+	register: async ({ params, locals, request, cookies, getClientAddress }) => {
 		const me = locals.user;
-		if (!me) redirect(303, `/login?next=/e/${params.slug}`);
-		const { e } = loadEvent(params.slug, me.id);
+		const { e } = loadEvent(params.slug, me?.id);
+		const form = await request.formData();
+
+		// Not logged in: a guest, who gives name and e-mail at the end of the form.
+		const guest = me ? null : parseGuest(form);
+		const guestBack = guest && { guestName: guest.name, guestEmail: guest.email };
+		if (guest && !guestsPerIp.take(getClientAddress()))
+			return fail(429, { error: 'rate' as const, ...guestBack });
+		// a known address: its account – but this device is not logged in (see guestAccount)
+		const knownId =
+			guest?.ok &&
+			db.select({ id: user.id }).from(user).where(eq(user.email, guest.email)).get()?.id;
+		const userId = me?.id ?? (knownId || undefined);
+
 		const state = registrationState(e);
-		const existing = getRegistration(e.id, me.id);
+		const existing = userId ? getRegistration(e.id, userId) : null;
 		const isActive = existing?.status === 'active';
+		// Somebody typing an address must not be able to change that person's registration.
+		if (guest && isActive) return fail(400, { error: 'guest_taken' as const, ...guestBack });
 
 		// New registrations only while open; existing ones may update travel details until the end.
-		const canRegister = state === 'open' && (isActive || !isFull(e, me.id));
+		const canRegister = state === 'open' && (isActive || !isFull(e, userId ?? ''));
 		const canUpdateTravel =
 			isActive && (state === 'open' || state === 'deadline' || state === 'closed');
 		if (!canRegister && !canUpdateTravel) return fail(400, { error: 'closed' as const });
 		const answersEditable = canRegister;
 
-		const form = await request.formData();
 		const fields = listFields(e.id);
 		const comment = String(form.get('comment') ?? '')
 			.trim()
@@ -229,7 +266,7 @@ export const actions: Actions = {
 					directions: travelField.config.directions ?? ['to', 'from'],
 					required: travelField.required,
 					timezone: e.timezone,
-					savedPlaces: listPlaces(me.id)
+					savedPlaces: me ? listPlaces(me.id) : []
 				})
 			: { ok: true as const, legs: [], placesToSave: [] };
 
@@ -238,26 +275,45 @@ export const actions: Actions = {
 		const contact = contactValue ? parseContact(form) : null;
 		const contactError = !!contactValue && !contact;
 
-		if ((answers && !answers.ok) || !travel.ok || contactError) {
+		if ((answers && !answers.ok) || !travel.ok || contactError || (guest && !guest.ok)) {
 			return fail(400, {
 				error: 'invalid' as const,
 				answerErrors: answers && !answers.ok ? answers.errors : {},
 				travelErrors: !travel.ok ? travel.errors : {},
-				contactError
+				contactError,
+				guestErrors: guest && !guest.ok ? guest.errors : {},
+				...guestBack
 			});
 		}
 
+		let uid: string;
+		let ownsAccount = !!me; // may add places and contacts to the profile
+		if (guest?.ok) {
+			const account = guestAccount(guest.name, guest.email, locals.locale);
+			uid = account.userId;
+			ownsAccount = account.created;
+		} else uid = me!.id;
+
 		saveRegistration({
 			eventId: e.id,
-			userId: me.id,
+			userId: uid,
 			comment,
 			answers: answers?.ok ? answers.answers : null,
 			legs: travel.legs,
-			placesToSave: travel.placesToSave
+			placesToSave: ownsAccount ? travel.placesToSave : []
 		});
-		if (contact && listContacts(me.id).length === 0) addContact(me.id, contact);
-		// Confirmation only for new (or renewed) registrations, not for every edit.
-		if (!isActive) void sendConfirmation(e.id, me.id);
+		if (ownsAccount && contact && listContacts(uid).length === 0) addContact(uid, contact);
+		// Confirmation only for new (or renewed) registrations, not for every edit. Guests always
+		// get it: it's their only receipt – and tells account owners if somebody used their address.
+		if (!isActive) void sendConfirmation(e.id, uid, { guest: !!guest });
+
+		if (guest?.ok) {
+			if (!ownsAccount) return { guestSaved: true, sentTo: guest.email };
+			// the new silent account: this device stays logged in (also for the page rendered now)
+			createSession(uid, cookies);
+			locals.user = validateSession(cookies);
+			return { saved: true, wasRegistered: false, sentTo: guest.email };
+		}
 		return { saved: true, wasRegistered: isActive };
 	},
 

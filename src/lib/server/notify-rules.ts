@@ -9,11 +9,10 @@ import type { TravelDirection } from '../forms.js';
 import type { TravelMode } from '../registration.js';
 import {
 	bestMatch,
-	GOOD_DETOUR_MIN,
 	isDriver,
+	isGoodMatch,
 	isSeeker,
 	searchPoints,
-	timeFits,
 	type Link,
 	type Participant,
 	type Point,
@@ -64,7 +63,7 @@ export function rideMatchNotices(
 			for (const d of drivers) {
 				if (d.userId === s.userId) continue;
 				const match = bestMatch(d.legs[direction]!, points, eventPoint, direction, travel);
-				if (!match || match.detourMin > GOOD_DETOUR_MIN || !timeFits(match)) continue;
+				if (!isGoodMatch(match)) continue;
 				out.push({
 					userId: s.userId,
 					registrationId: s.registrationId,

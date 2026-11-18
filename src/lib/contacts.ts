@@ -1,5 +1,16 @@
-export const CONTACT_KINDS = ['phone', 'signal', 'whatsapp', 'telegram', 'email'] as const;
+export const CONTACT_KINDS = ['phone', 'signal', 'whatsapp', 'telegram', 'email', 'other'] as const;
 export type ContactKind = (typeof CONTACT_KINDS)[number];
+
+/** A contact option as shown to others. `label` names the service for kind "other" (e.g. Threema). */
+export type ContactOption = { kind: ContactKind; value: string; label?: string | null };
+
+export const CONTACT_LABEL_MAX = 30;
+
+/** Name of the service for "other" (e.g. "Threema", "Matrix") – required there, null if invalid. */
+export function normalizeContactLabel(raw: string): string | null {
+	const label = raw.trim().replace(/\s+/g, ' ');
+	return label && label.length <= CONTACT_LABEL_MAX ? label : null;
+}
 
 /** Normalizes and validates a contact value; returns null if invalid. Shared by client & server. */
 export function normalizeContact(kind: ContactKind, raw: string): string | null {
@@ -20,5 +31,8 @@ export function normalizeContact(kind: ContactKind, raw: string): string | null 
 		}
 		case 'email':
 			return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? value.toLowerCase() : null;
+		case 'other':
+			// any other messenger: an ID, a handle or a link – shown as given
+			return value.replace(/\s+/g, ' ');
 	}
 }

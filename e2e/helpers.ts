@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, scryptSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
-import type { BrowserContext, Page } from '@playwright/test';
+import { expect, type BrowserContext, type Page } from '@playwright/test';
 
 const DB_PATH = 'e2e/.tmp/test.db';
 const BASE = 'http://localhost:4317';
@@ -13,8 +13,8 @@ export async function loginAs(context: BrowserContext, name: string, onboarded =
 	const email = `${name.toLowerCase().replace(/\W+/g, '.')}.${randomBytes(3).toString('hex')}@example.org`;
 	const now = Math.floor(Date.now() / 1000);
 	db.prepare(
-		'insert into user (id, email, name, onboarded_at, created_at) values (?, ?, ?, ?, ?)'
-	).run(userId, email, onboarded ? name : null, onboarded ? now : null, now);
+		'insert into user (id, email, name, onboarded_at, email_verified_at, created_at) values (?, ?, ?, ?, ?, ?)'
+	).run(userId, email, onboarded ? name : null, onboarded ? now : null, now, now);
 	const token = randomBytes(32).toString('base64url');
 	const id = createHash('sha256').update(token).digest('hex');
 	db.prepare('insert into session (id, user_id, expires_at) values (?, ?, ?)').run(
@@ -93,6 +93,7 @@ export function createEvent(
 		title: string;
 		fields: FieldSpec[];
 		capacity?: number | null;
+		rideVisibility?: 'public' | 'matched' | 'internal';
 		deadlinePassed?: boolean;
 		startsInDays?: number;
 	}
@@ -104,9 +105,9 @@ export function createEvent(
 	const day = 86400;
 	db.prepare(
 		`insert into event (id, slug, title, description, location_name, location_address, location_area, lat, lon,
-		 starts_at, ends_at, timezone, registration_deadline, registration_closed, capacity, status, created_by, created_at, updated_at)
+		 starts_at, ends_at, timezone, registration_deadline, registration_closed, capacity, ride_visibility, status, created_by, created_at, updated_at)
 		 values (?, ?, ?, '', 'Jugendhof Waldheim', 'Am Wald 3, 57000 Waldheim', 'Waldheim', 50.9, 8.1,
-		 ?, ?, 'Europe/Berlin', ?, 0, ?, 'published', ?, ?, ?)`
+		 ?, ?, 'Europe/Berlin', ?, 0, ?, ?, 'published', ?, ?, ?)`
 	).run(
 		id,
 		slug,
@@ -115,6 +116,7 @@ export function createEvent(
 		now + ((opts.startsInDays ?? 20) + 2) * day,
 		opts.deadlinePassed ? now - day : null,
 		opts.capacity ?? null,
+		opts.rideVisibility ?? 'public',
 		ownerId,
 		now,
 		now
@@ -161,6 +163,23 @@ export function localDateTime(daysFromNow: number, hour: number) {
 	d.setHours(hour, 0, 0, 0);
 	const pad = (n: number) => String(n).padStart(2, '0');
 	return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:00`;
+}
+
+/** Picks a date range ("YYYY-MM-DD") in the event form's range calendar – like a person would. */
+export async function pickDates(page: Page, start: string, end: string) {
+	await page.getByRole('button', { name: /^Zeitraum/ }).click();
+	const calendar = page.getByRole('dialog', { name: 'Zeitraum' });
+	for (const date of [start, end]) {
+		for (let i = 0; i < 24 && !(await calendar.locator(`[data-date="${date}"]`).count()); i++) {
+			const back =
+				date < (await calendar.locator('[data-date]').first().getAttribute('data-date'))!;
+			await calendar
+				.getByRole('button', { name: back ? 'Vorheriger Monat' : 'Nächster Monat' })
+				.click();
+		}
+		await calendar.locator(`[data-date="${date}"]`).click();
+	}
+	await expect(calendar).toBeHidden();
 }
 
 /** Waits until the app is interactive (set in the root layout's onMount). */
@@ -253,6 +272,31 @@ export function ageRegistration(registrationId: string, days: number) {
 		registrationId
 	);
 	db.close();
+}
+
+/** The user row for an e-mail address (guest accounts are created by the app itself). */
+export function userByEmail(email: string) {
+	const db = new Database(DB_PATH);
+	const row = db
+		.prepare('select id, name, email_verified_at, password_hash from user where email = ?')
+		.get(email) as
+		| { id: string; name: string; email_verified_at: number | null; password_hash: string | null }
+		| undefined;
+	db.close();
+	return row;
+}
+
+/** Number of active registrations of a user for an event. */
+export function activeRegistrations(userId: string, slug: string): number {
+	const db = new Database(DB_PATH);
+	const row = db
+		.prepare(
+			`select count(*) as n from registration r join event e on e.id = r.event_id
+			 where r.user_id = ? and e.slug = ? and r.status = 'active'`
+		)
+		.get(userId, slug) as { n: number };
+	db.close();
+	return row.n;
 }
 
 export type SentMail = { to: string; subject: string; text: string };

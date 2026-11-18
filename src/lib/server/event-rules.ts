@@ -1,4 +1,5 @@
 import { isValidTimeZone, zonedDateTime } from '../datetime.js';
+import { isRideVisibility, type RideVisibility } from '../ride-visibility.js';
 import type { Event } from './db/schema.js';
 
 /* ------------------------------------------------------------------ details */
@@ -16,6 +17,7 @@ export type EventDetails = {
 	timezone: string;
 	registrationDeadline: Date | null;
 	capacity: number | null;
+	rideVisibility: RideVisibility;
 	startHasTime: boolean;
 	endHasTime: boolean;
 	deadlineHasTime: boolean;
@@ -30,7 +32,8 @@ export type DetailsError =
 	| 'end_before_start'
 	| 'deadline'
 	| 'capacity'
-	| 'timezone';
+	| 'timezone'
+	| 'visibility_widen';
 
 const str = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 
@@ -91,6 +94,9 @@ export function parseEventDetails(
 	if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > 100000))
 		errors.push('capacity');
 
+	const visibilityRaw = str(form, 'rideVisibility');
+	const rideVisibility = isRideVisibility(visibilityRaw) ? visibilityRaw : 'public';
+
 	if (errors.length) return { ok: false, errors };
 	return {
 		ok: true,
@@ -107,6 +113,7 @@ export function parseEventDetails(
 			timezone: tz,
 			registrationDeadline,
 			capacity,
+			rideVisibility,
 			startHasTime: start!.hasTime,
 			endHasTime: end!.hasTime,
 			deadlineHasTime: deadline?.hasTime ?? true

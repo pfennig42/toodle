@@ -22,7 +22,11 @@ export type FieldConfig = {
 	options?: string[];
 	/** travel */
 	directions?: TravelDirection[];
+	/** Further reading for guests, e.g. the privacy policy – any question type except travel */
+	links?: FieldLink[];
 };
+
+export type FieldLink = { url: string; text: string };
 
 export type FieldDef = {
 	/** Existing field id; missing for fields added in the builder. */
@@ -39,6 +43,38 @@ export const LABEL_MAX = 200;
 export const HELP_MAX = 500;
 export const OPTION_MAX = 120;
 export const MAX_OPTIONS = 30;
+export const LINK_URL_MAX = 500;
+export const LINK_TEXT_MAX = 120;
+export const MAX_LINKS = 5;
+
+/**
+ * Normalizes a web address typed by an organizer: "example.org/datenschutz" gets https://.
+ * Only http(s) – never javascript: or data: links in guests' forms. Empty → null.
+ */
+export function normalizeLinkUrl(input: string): string | null | 'invalid' {
+	const raw = input.trim();
+	if (!raw) return null;
+	const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+	if (withScheme.length > LINK_URL_MAX) return 'invalid';
+	try {
+		const url = new URL(withScheme);
+		if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'invalid';
+		if (!url.hostname.includes('.') && url.hostname !== 'localhost') return 'invalid';
+		return url.href;
+	} catch {
+		return 'invalid';
+	}
+}
+
+/** What guests see as link text: the given text, or else the bare host name. */
+export function linkLabel(link: FieldLink): string {
+	if (link.text) return link.text;
+	try {
+		return new URL(link.url).hostname.replace(/^www\./, '');
+	} catch {
+		return link.url;
+	}
+}
 
 export const hasOptions = (type: FieldType) => type === 'single_choice' || type === 'multi_choice';
 
@@ -47,6 +83,7 @@ export type FormDefinitionError =
 	| { kind: 'too_many' }
 	| { kind: 'label'; index: number }
 	| { kind: 'options'; index: number }
+	| { kind: 'link'; index: number }
 	| { kind: 'travel_twice' };
 
 /** Validates and normalizes builder output. Never trusts the client. */
@@ -102,6 +139,21 @@ export function parseFormDefinition(
 			config.directions = dirs.length
 				? TRAVEL_DIRECTIONS.filter((d) => dirs.includes(d))
 				: ['to', 'from'];
+		}
+
+		const rawLinks = (rawConfig as FieldConfig).links;
+		if (type !== 'travel' && Array.isArray(rawLinks)) {
+			const links: FieldLink[] = [];
+			for (const raw of rawLinks) {
+				if (typeof raw !== 'object' || raw === null) continue;
+				const url = normalizeLinkUrl(typeof raw.url === 'string' ? raw.url : '');
+				const text = typeof raw.text === 'string' ? raw.text.trim() : '';
+				if (url === 'invalid' || text.length > LINK_TEXT_MAX)
+					return { ok: false, error: { kind: 'link', index } };
+				if (url) links.push({ url, text }); // a link without address is simply left out
+			}
+			if (links.length > MAX_LINKS) return { ok: false, error: { kind: 'link', index } };
+			if (links.length) config.links = links;
 		}
 
 		fields.push({ id, type, label, help, required: r.required === true, config });

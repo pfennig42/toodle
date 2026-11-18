@@ -6,6 +6,9 @@ import {
 	canUnlink,
 	detourMinutes,
 	distanceKm,
+	linkVisible,
+	MATCHED_LIMIT,
+	restrictView,
 	searchPoints,
 	staleLinks,
 	type Participant,
@@ -192,5 +195,122 @@ describe('permissions', () => {
 			}
 		];
 		expect(staleLinks([anna, lea], links).map((l) => l.id)).toEqual(['gone']);
+	});
+});
+
+const MIDWAY = { lat: 50.92, lon: 7.5 };
+
+describe('restrictView', () => {
+	// seeker halfway between Köln and the event; Köln drives past, Berlin doesn't
+	const seekerLeg = leg({
+		mode: 'seeking',
+		pickups: [{ label: 'Midway', area: 'Midway', ...MIDWAY, time: null }]
+	});
+	const people = [
+		person('me', seekerLeg),
+		person('koeln', driverFrom(KOELN)),
+		person('koeln-full', driverFrom(KOELN, { carStatus: 'full' })),
+		person('far', driverFrom({ lat: 52.5, lon: 13.4 })),
+		person('other-seeker', seekerLeg),
+		person('passenger', leg({ mode: 'seeking', ...BONN }))
+	];
+	const links = [
+		{
+			id: 'l1',
+			direction: 'to' as const,
+			driverRegistrationId: 'koeln',
+			passengerRegistrationId: 'passenger'
+		}
+	];
+	const view = (viewer: string) => buildDirectionView(people, links, viewer, 'to', EVENT);
+
+	it('changes nothing for public events', () => {
+		const v = restrictView(view('me'), 'public');
+		expect(v.drivers).toHaveLength(3);
+		expect(v.seekers).toHaveLength(2);
+		expect(v.hidden).toEqual({ drivers: 0, seekers: 0 });
+	});
+
+	it('shows seekers only drivers that can take them, without their passengers', () => {
+		const v = restrictView(view('me'), 'matched');
+		expect(v.drivers.map((d) => d.registrationId)).toEqual(['koeln']);
+		expect(v.drivers[0].passengers).toEqual([]);
+		expect(v.seekers).toEqual([]);
+		expect(v.hidden).toEqual({ drivers: 2, seekers: 2 });
+	});
+
+	it('shows drivers only open seekers on their way, and no other drivers', () => {
+		const v = restrictView(view('koeln'), 'matched');
+		// "passenger" is already with koeln (shown as own passenger), "me" fits
+		expect(v.seekers.map((s) => s.registrationId).sort()).toEqual(
+			['me', 'other-seeker', 'passenger'].sort()
+		);
+		expect(v.drivers).toEqual([]);
+		const far = restrictView(view('far'), 'matched');
+		expect(far.seekers).toEqual([]);
+	});
+
+	it('keeps the own driver even when the car is full', () => {
+		const withLink = buildDirectionView(
+			people,
+			[
+				{
+					id: 'l2',
+					direction: 'to',
+					driverRegistrationId: 'koeln-full',
+					passengerRegistrationId: 'me'
+				}
+			],
+			'me',
+			'to',
+			EVENT
+		);
+		const v = restrictView(withLink, 'matched');
+		expect(v.drivers.map((d) => d.registrationId)).toContain('koeln-full');
+		expect(v.myDriver?.registrationId).toBe('koeln-full');
+	});
+
+	it('limits the lists', () => {
+		const many = [
+			person('me', seekerLeg),
+			...Array.from({ length: MATCHED_LIMIT + 3 }, (_, i) => person(`d${i}`, driverFrom(KOELN)))
+		];
+		const v = restrictView(buildDirectionView(many, [], 'me', 'to', EVENT), 'matched');
+		expect(v.drivers).toHaveLength(MATCHED_LIMIT);
+		expect(v.hidden.drivers).toBe(3);
+	});
+
+	it('shows nobody else for internal events, but keeps own links', () => {
+		const v = restrictView(view('passenger'), 'internal');
+		expect(v.drivers).toEqual([]);
+		expect(v.seekers).toEqual([]);
+		expect(v.myDriver?.registrationId).toBe('koeln');
+	});
+});
+
+describe('linkVisible', () => {
+	const seekerLeg = leg({
+		mode: 'seeking',
+		pickups: [{ label: 'Midway', area: 'Midway', ...MIDWAY, time: null }]
+	});
+	const people = [
+		person('me', seekerLeg),
+		person('koeln', driverFrom(KOELN)),
+		person('far', driverFrom({ lat: 52.5, lon: 13.4 }))
+	];
+	const me = { registrationId: 'me', isOrganizer: false };
+	const v = restrictView(buildDirectionView(people, [], 'me', 'to', EVENT), 'matched');
+
+	it('allows links only to shown matches', () => {
+		expect(linkVisible(me, 'matched', v, 'koeln', 'me')).toBe(true);
+		expect(linkVisible(me, 'matched', v, 'far', 'me')).toBe(false);
+	});
+
+	it('leaves internal events to the organizers', () => {
+		expect(linkVisible(me, 'internal', v, 'koeln', 'me')).toBe(false);
+		expect(
+			linkVisible({ registrationId: null, isOrganizer: true }, 'internal', null, 'koeln', 'me')
+		).toBe(true);
+		expect(linkVisible(me, 'public', null, 'far', 'me')).toBe(true);
 	});
 });

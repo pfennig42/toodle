@@ -11,6 +11,14 @@ describe('contactHref', () => {
 		expect(contactHref('email', 'a@b.de')).toBe('mailto:a@b.de');
 	});
 
+	it('opens links of other messengers, shows anything else as text', () => {
+		expect(contactHref('other', 'https://matrix.to/#/@anna:example.org')).toBe(
+			'https://matrix.to/#/@anna:example.org'
+		);
+		expect(contactHref('other', 'ABCD1234')).toBeNull();
+		expect(contactHref('other', 'javascript:alert(1)')).toBeNull();
+	});
+
 	it('has no link for Signal usernames', () => {
 		expect(contactHref('signal', 'anna.42')).toBeNull();
 	});

@@ -31,15 +31,37 @@ export async function geocode(
 		url.searchParams.set('lon', String(near.lon));
 	}
 
+	return toResults(await fetchFeatures(url));
+}
+
+/** The place at a point clicked on the map (Photon's /reverse). Null if nothing is there. */
+export async function reverseGeocode(
+	point: { lat: number; lon: number },
+	lang: string
+): Promise<GeocodeResult | null> {
+	const url = new URL('/reverse', GEOCODER_URL);
+	url.searchParams.set('lat', String(point.lat));
+	url.searchParams.set('lon', String(point.lon));
+	url.searchParams.set('limit', '1');
+	if (['de', 'en', 'fr'].includes(lang)) url.searchParams.set('lang', lang);
+	const [hit] = toResults(await fetchFeatures(url));
+	// keep the clicked spot – the nearest address may be some metres away
+	return hit ? { ...hit, lat: point.lat, lon: point.lon } : null;
+}
+
+async function fetchFeatures(url: URL): Promise<PhotonFeature[]> {
 	const res = await fetch(url, {
 		headers: { 'user-agent': 'toodle (self-hosted event & ride sharing app)' },
 		signal: AbortSignal.timeout(5000)
 	});
 	if (!res.ok) throw new Error(`Geocoder responded with ${res.status}`);
 	const data = (await res.json()) as { features?: PhotonFeature[] };
+	return data.features ?? [];
+}
 
+function toResults(features: PhotonFeature[]): GeocodeResult[] {
 	const seen = new Set<string>();
-	return (data.features ?? [])
+	return features
 		.map((f) => ({
 			name: nameFromProperties(f.properties),
 			address: addressFromProperties(f.properties),

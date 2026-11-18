@@ -61,7 +61,9 @@ export function participantRows(
 		const row: string[] = [
 			p.name,
 			p.email,
-			p.contacts.map((c) => `${c.kind}: ${c.value}`).join(', '),
+			p.contacts
+				.map((c) => `${c.kind === 'other' && c.label ? c.label : c.kind}: ${c.value}`)
+				.join(', '),
 			p.status === 'active' ? m.csv_status_active() : m.csv_status_withdrawn(),
 			time(p.createdAt)
 		];

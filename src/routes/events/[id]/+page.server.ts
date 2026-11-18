@@ -45,6 +45,7 @@ export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
 			deadlineHasTime: e.deadlineHasTime,
 			registrationDeadline: e.registrationDeadline,
 			capacity: e.capacity,
+			rideVisibility: e.rideVisibility,
 			locationName: e.locationName,
 			locationArea: e.locationArea,
 			registrations: countActiveRegistrations(e.id),

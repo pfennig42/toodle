@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeContact } from './contacts';
+import { normalizeContact, normalizeContactLabel } from './contacts';
 
 describe('normalizeContact', () => {
 	it('cleans phone numbers', () => {
@@ -17,6 +17,15 @@ describe('normalizeContact', () => {
 		expect(normalizeContact('telegram', 'anna_mueller')).toBe('@anna_mueller');
 		expect(normalizeContact('telegram', 'https://t.me/anna_mueller')).toBe('@anna_mueller');
 		expect(normalizeContact('telegram', '@ab')).toBeNull();
+	});
+
+	it('takes other messengers as given, with the name of the service', () => {
+		expect(normalizeContact('other', '  ECHO  4 2 ')).toBe('ECHO 4 2');
+		expect(normalizeContact('other', '')).toBeNull();
+		expect(normalizeContact('other', 'x'.repeat(101))).toBeNull();
+		expect(normalizeContactLabel(' Threema ')).toBe('Threema');
+		expect(normalizeContactLabel('')).toBeNull();
+		expect(normalizeContactLabel('x'.repeat(31))).toBeNull();
 	});
 
 	it('validates email', () => {

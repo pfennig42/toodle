@@ -4,6 +4,7 @@
 	import { m } from '#lib/paraglide/messages.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatDateTime, formatRange } from '#lib/datetime.js';
+	import { LARGE_EVENT } from '#lib/ride-visibility.js';
 	import ShareBox from '#lib/components/ShareBox.svelte';
 	import type { PageProps } from './$types';
 
@@ -83,6 +84,15 @@
 		</li>
 	</ul>
 
+	{#if o.hasTravel && o.rideVisibility === 'public' && o.registrations > LARGE_EVENT}
+		<section class="suggest stack" aria-label={m.event_rides_visibility()}>
+			<p>{m.overview_visibility_hint({ count: o.registrations })}</p>
+			<a class="btn small align-start" href={resolve('/events/[id]/details', { id: ev.id })}
+				>{m.overview_visibility_action()}</a
+			>
+		</section>
+	{/if}
+
 	{#if !data.published && ev.status !== 'draft'}
 		<section class="stack" aria-labelledby="share-title">
 			<h2 id="share-title">{m.overview_share_title()}</h2>
@@ -124,6 +134,16 @@
 		border-radius: var(--radius);
 		background: var(--surface);
 		border: 1px solid var(--border);
+	}
+
+	.suggest {
+		padding: var(--space-4);
+		border-radius: var(--radius);
+		background: var(--surface-2);
+	}
+
+	.align-start {
+		align-self: flex-start;
 	}
 
 	.facts {

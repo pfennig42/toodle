@@ -26,6 +26,14 @@ describe('parseEventDetails', () => {
 		expect(r.details).toMatchObject({ startHasTime: true, endHasTime: true });
 		expect(r.details.lat).toBeNull();
 		expect(r.details.capacity).toBeNull();
+		expect(r.details.rideVisibility).toBe('public');
+	});
+
+	it('takes a valid ride visibility and ignores anything else', () => {
+		const ok = parseEventDetails(formData({ ...base, rideVisibility: 'internal' }));
+		expect(ok.ok && ok.details.rideVisibility).toBe('internal');
+		const bad = parseEventDetails(formData({ ...base, rideVisibility: 'everyone' }));
+		expect(bad.ok && bad.details.rideVisibility).toBe('public');
 	});
 
 	it('takes the location only as a complete set', () => {

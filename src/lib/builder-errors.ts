@@ -9,6 +9,8 @@ export function builderErrorText(err: FormDefinitionError | null | undefined): s
 			return m.builder_error_label({ number: err.index + 1 });
 		case 'options':
 			return m.builder_error_options({ number: err.index + 1 });
+		case 'link':
+			return m.builder_error_link({ number: err.index + 1 });
 		case 'too_many':
 			return m.builder_error_too_many();
 		case 'travel_twice':
