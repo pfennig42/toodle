@@ -1,5 +1,6 @@
 import { isValidTimeZone, zonedDateTime } from '../datetime.js';
 import { isRideVisibility, type RideVisibility } from '../ride-visibility.js';
+import { normalizeEmail } from './auth/validation.js';
 import type { Event } from './db/schema.js';
 
 /* ------------------------------------------------------------------ details */
@@ -17,6 +18,7 @@ export type EventDetails = {
 	timezone: string;
 	registrationDeadline: Date | null;
 	capacity: number | null;
+	contactEmail: string;
 	rideVisibility: RideVisibility;
 	startHasTime: boolean;
 	endHasTime: boolean;
@@ -32,6 +34,7 @@ export type DetailsError =
 	| 'end_before_start'
 	| 'deadline'
 	| 'capacity'
+	| 'contact_email'
 	| 'timezone'
 	| 'visibility_widen';
 
@@ -94,6 +97,9 @@ export function parseEventDetails(
 	if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > 100000))
 		errors.push('capacity');
 
+	const contactEmail = normalizeEmail(form.get('contactEmail'));
+	if (!contactEmail) errors.push('contact_email');
+
 	const visibilityRaw = str(form, 'rideVisibility');
 	const rideVisibility = isRideVisibility(visibilityRaw) ? visibilityRaw : 'public';
 
@@ -113,6 +119,7 @@ export function parseEventDetails(
 			timezone: tz,
 			registrationDeadline,
 			capacity,
+			contactEmail: contactEmail!,
 			rideVisibility,
 			startHasTime: start!.hasTime,
 			endHasTime: end!.hasTime,
@@ -122,9 +129,12 @@ export function parseEventDetails(
 }
 
 /** Everything needed before an event can go public. */
-export function publishBlockers(e: Event): ('location' | 'past')[] {
-	const blockers: ('location' | 'past')[] = [];
+export type PublishBlocker = 'location' | 'contact' | 'past';
+
+export function publishBlockers(e: Event): PublishBlocker[] {
+	const blockers: PublishBlocker[] = [];
 	if (e.lat === null || e.lon === null) blockers.push('location');
+	if (!e.contactEmail) blockers.push('contact');
 	if (e.endsAt.getTime() < Date.now()) blockers.push('past');
 	return blockers;
 }

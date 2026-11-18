@@ -232,6 +232,20 @@
 	</fieldset>
 
 	<label class="field">
+		<span>{m.event_contact_email()}</span>
+		<input
+			type="email"
+			name="contactEmail"
+			required
+			maxlength="254"
+			autocomplete="email"
+			bind:value={v.contactEmail}
+		/>
+		<span class="muted small">{m.event_contact_email_hint()}</span>
+		{#if has('contact_email')}<span class="error small">{m.event_error_contact_email()}</span>{/if}
+	</label>
+
+	<label class="field">
 		<span>{m.event_description()} <span class="muted">({m.optional()})</span></span>
 		<textarea name="description" rows="6" maxlength="5000" bind:value={v.description}></textarea>
 		<span class="muted small">{m.event_description_hint()}</span>

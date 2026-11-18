@@ -144,6 +144,11 @@ export const event = sqliteTable(
 			.notNull()
 			.default(false),
 		capacity: integer('capacity'),
+		/**
+		 * Where participants reach the organizers: shown on the event page and used as Reply-To
+		 * of every event mail. Required for publishing (null only for legacy rows).
+		 */
+		contactEmail: text('contact_email'),
 		rideVisibility: text('ride_visibility', { enum: RIDE_VISIBILITIES })
 			.notNull()
 			.default('public'),

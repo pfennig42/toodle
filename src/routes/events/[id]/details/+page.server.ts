@@ -8,7 +8,7 @@ import type { Actions, PageServerLoad } from './$types';
 export const load: PageServerLoad = ({ params, locals, url }) => {
 	const e = getEventForOrganizer(params.id, locals.user!.id)!;
 	return {
-		values: formValuesFromEvent(e),
+		values: formValuesFromEvent(e, locals.user!.email),
 		savedVisibility: e.rideVisibility,
 		registrations: countActiveRegistrations(e.id),
 		copied: url.searchParams.has('copied')

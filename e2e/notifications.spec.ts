@@ -39,6 +39,9 @@ test('confirmation, ride hints, ride links, reminders and unsubscribing', async 
 		.toContain('Angemeldet: Spieleabend');
 	const confirm = outbox(lea.email).find((m) => m.subject === 'Angemeldet: Spieleabend')!;
 	expect(confirm.text).toContain('Hallo Lea,');
+	// answers go to the organizers, not into the no-reply void
+	expect(confirm.replyTo).toBe('orga@example.org');
+	expect(confirm.text).toContain('Antworte einfach auf diese E-Mail, sie geht an die Orga.');
 	expect(confirm.text).toContain(`Zur Veranstaltung: http://localhost:4317/e/${simple}`);
 	expect(confirm.text).toMatch(
 		/Anmeldebestätigungen abbestellen: http:\/\/localhost:4317\/unsubscribe\//
@@ -61,6 +64,8 @@ test('confirmation, ride hints, ride links, reminders and unsubscribing', async 
 	const hint = outbox(lea.email).find((m) => m.subject.startsWith('Mitfahrgelegenheit'))!;
 	expect(hint.text).toContain('Anreise: Anna (Köln-Ehrenfeld) fährt mit dem Auto');
 	expect(hint.text).toContain(`http://localhost:4317/e/${camp}/rides?dir=to`);
+	expect(hint.replyTo).toBe('orga@example.org');
+	expect(hint.text).toContain('Kontaktwege in der Mitfahr-Ansicht');
 	// a few more job runs must not repeat it
 	await page.waitForTimeout(2500);
 	expect(outbox(lea.email).filter((m) => m.subject.startsWith('Mitfahrgelegenheit'))).toHaveLength(

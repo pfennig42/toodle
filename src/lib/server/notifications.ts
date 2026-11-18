@@ -151,6 +151,18 @@ async function deliver(u: Recipient, mail: Mail, push: PushMessage): Promise<boo
 	return (await trySendMail(mail)) || pushed > 0;
 }
 
+/**
+ * Answers to event mails go to the organizers (Reply-To) – people just hit "reply".
+ * The footer says so; for ride mails it points to the ride view for talking to each other.
+ */
+function orgaReply(e: Event, footer: string, rides = false) {
+	if (!e.contactEmail) return { footer, replyTo: undefined };
+	return {
+		footer: `${footer} ${rides ? m.mail_reply_rides() : m.mail_reply_orga()}`,
+		replyTo: e.contactEmail
+	};
+}
+
 const path = (url: string) => url.slice(ORIGIN.length) || '/';
 
 /* ------------------------------------------------------------ confirmation */
@@ -208,8 +220,10 @@ export async function sendConfirmation(
 				);
 				after.push(...matches.slice(0, 5).map((n) => `• ${matchLine(n)}`));
 			}
+			const reply = orgaReply(e, m.mail_confirm_footer());
 			return {
 				to: u.email,
+				replyTo: reply.replyTo,
 				subject: m.mail_confirm_subject({ title: e.title }),
 				...renderMail({
 					paragraphs: [
@@ -224,7 +238,7 @@ export async function sendConfirmation(
 					action: hasTravel
 						? { label: m.mail_button_rides(), url: ridesUrl(e) }
 						: { label: m.mail_button_event(), url: eventUrl(e) },
-					footer: m.mail_confirm_footer(),
+					footer: reply.footer,
 					unsubscribe: {
 						label: m.mail_unsubscribe_confirmation(),
 						url: unsubscribeUrl(u, 'confirmation')
@@ -302,8 +316,10 @@ export async function notifyRideLink(
 				const subject = isDriver
 					? m.mail_link_driver_subject(vars)
 					: m.mail_link_passenger_subject(vars);
+				const reply = orgaReply(e, m.mail_rides_footer(), true);
 				const mail: Mail = {
 					to: recipient.email,
+					replyTo: reply.replyTo,
 					subject,
 					...renderMail({
 						paragraphs: [
@@ -313,7 +329,7 @@ export async function notifyRideLink(
 							m.mail_link_hint()
 						],
 						action: { label: m.mail_button_rides(), url: ridesUrl(e, direction) },
-						footer: m.mail_rides_footer(),
+						footer: reply.footer,
 						unsubscribe: {
 							label: m.mail_unsubscribe_rides(),
 							url: unsubscribeUrl(recipient, 'rides')
@@ -383,8 +399,10 @@ async function rideMatchMails(e: Event, now: Date) {
 			const subject = seeking
 				? m.mail_match_subject_seeker({ title: e.title })
 				: m.mail_match_subject_driver({ title: e.title });
+			const reply = orgaReply(e, m.mail_rides_footer(), true);
 			const mail: Mail = {
 				to: u.email,
+				replyTo: reply.replyTo,
 				subject,
 				...renderMail({
 					paragraphs: [
@@ -396,7 +414,7 @@ async function rideMatchMails(e: Event, now: Date) {
 					items: list.slice(0, 10).map(matchLine),
 					after: [m.mail_match_hint()],
 					action: { label: m.mail_button_rides(), url: ridesUrl(e, list[0].direction) },
-					footer: m.mail_rides_footer(),
+					footer: reply.footer,
 					unsubscribe: { label: m.mail_unsubscribe_rides(), url: unsubscribeUrl(u, 'rides') }
 				}),
 				unsubscribeUrl: unsubscribeUrl(u, 'rides')
@@ -446,8 +464,10 @@ async function travelReminders(e: Event, now: Date) {
 		if (!u.notifyReminders) continue;
 		const { mail, push } = withLocale(u.locale, () => {
 			const subject = m.mail_reminder_subject({ title: e.title });
+			const reply = orgaReply(e, m.mail_reminder_footer());
 			const mail: Mail = {
 				to: u.email,
+				replyTo: reply.replyTo,
 				subject,
 				...renderMail({
 					paragraphs: [
@@ -456,7 +476,7 @@ async function travelReminders(e: Event, now: Date) {
 						...(drivers ? [m.mail_reminder_drivers({ count: drivers })] : [])
 					],
 					action: { label: m.mail_reminder_button(), url: eventUrl(e) },
-					footer: m.mail_reminder_footer(),
+					footer: reply.footer,
 					unsubscribe: {
 						label: m.mail_unsubscribe_reminders(),
 						url: unsubscribeUrl(u, 'reminders')

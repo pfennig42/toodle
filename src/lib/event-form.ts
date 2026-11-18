@@ -16,6 +16,7 @@ export type EventFormValues = {
 	deadlineDate: string;
 	deadlineTime: string;
 	capacity: string;
+	contactEmail: string;
 	rideVisibility: RideVisibility;
 };
 
@@ -32,6 +33,7 @@ type EventLike = {
 	timezone: string;
 	registrationDeadline: Date | null;
 	capacity: number | null;
+	contactEmail: string | null;
 	rideVisibility: RideVisibility;
 	startHasTime: boolean;
 	endHasTime: boolean;
@@ -44,7 +46,8 @@ const parts = (d: Date | null, tz: string, hasTime: boolean) => {
 	return [date, hasTime ? time : ''] as const;
 };
 
-export function formValuesFromEvent(e: EventLike): EventFormValues {
+/** `fallbackEmail`: prefills the contact address of (legacy) events that have none yet. */
+export function formValuesFromEvent(e: EventLike, fallbackEmail = ''): EventFormValues {
 	return {
 		title: e.title,
 		description: e.description,
@@ -62,6 +65,7 @@ export function formValuesFromEvent(e: EventLike): EventFormValues {
 		),
 		timezone: e.timezone,
 		capacity: e.capacity?.toString() ?? '',
+		contactEmail: e.contactEmail ?? fallbackEmail,
 		rideVisibility: e.rideVisibility
 	};
 }
@@ -88,11 +92,13 @@ export function formValuesFromForm(form: FormData): EventFormValues {
 		deadlineDate: s('deadlineDate'),
 		deadlineTime: s('deadlineTime'),
 		capacity: s('capacity'),
+		contactEmail: s('contactEmail'),
 		rideVisibility: isRideVisibility(visibility) ? visibility : 'public'
 	};
 }
 
-export const emptyFormValues = (): EventFormValues => ({
+/** `contactEmail`: prefilled with the creator's own address. */
+export const emptyFormValues = (contactEmail = ''): EventFormValues => ({
 	title: '',
 	description: '',
 	locationName: '',
@@ -105,5 +111,6 @@ export const emptyFormValues = (): EventFormValues => ({
 	deadlineDate: '',
 	deadlineTime: '',
 	capacity: '',
+	contactEmail,
 	rideVisibility: 'public'
 });

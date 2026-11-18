@@ -35,6 +35,9 @@
 			{#if o.blockers.includes('location')}
 				<p class="error small">{m.event_blocker_location()}</p>
 			{/if}
+			{#if o.blockers.includes('contact')}
+				<p class="error small">{m.event_blocker_contact()}</p>
+			{/if}
 			{#if o.blockers.includes('past')}
 				<p class="error small">{m.event_blocker_past()}</p>
 			{/if}

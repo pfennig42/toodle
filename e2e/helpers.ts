@@ -105,9 +105,9 @@ export function createEvent(
 	const day = 86400;
 	db.prepare(
 		`insert into event (id, slug, title, description, location_name, location_address, location_area, lat, lon,
-		 starts_at, ends_at, timezone, registration_deadline, registration_closed, capacity, ride_visibility, status, created_by, created_at, updated_at)
+		 starts_at, ends_at, timezone, registration_deadline, registration_closed, capacity, contact_email, ride_visibility, status, created_by, created_at, updated_at)
 		 values (?, ?, ?, '', 'Jugendhof Waldheim', 'Am Wald 3, 57000 Waldheim', 'Waldheim', 50.9, 8.1,
-		 ?, ?, 'Europe/Berlin', ?, 0, ?, ?, 'published', ?, ?, ?)`
+		 ?, ?, 'Europe/Berlin', ?, 0, ?, 'orga@example.org', ?, 'published', ?, ?, ?)`
 	).run(
 		id,
 		slug,
@@ -299,7 +299,7 @@ export function activeRegistrations(userId: string, slug: string): number {
 	return row.n;
 }
 
-export type SentMail = { to: string; subject: string; text: string };
+export type SentMail = { to: string; replyTo?: string; subject: string; text: string };
 
 /** All mails the server has "sent" so far (see MAIL_OUTBOX in playwright.config.ts). */
 export function outbox(to?: string): SentMail[] {

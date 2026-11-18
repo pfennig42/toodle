@@ -14,7 +14,8 @@ const base = {
 	startTime: '18:00',
 	endDate: '2027-07-18',
 	endTime: '14:00',
-	timezone: 'Europe/Berlin'
+	timezone: 'Europe/Berlin',
+	contactEmail: 'Orga@Example.org '
 };
 
 describe('parseEventDetails', () => {
@@ -27,6 +28,14 @@ describe('parseEventDetails', () => {
 		expect(r.details.lat).toBeNull();
 		expect(r.details.capacity).toBeNull();
 		expect(r.details.rideVisibility).toBe('public');
+		expect(r.details.contactEmail).toBe('orga@example.org');
+	});
+
+	it('requires a valid contact email', () => {
+		for (const contactEmail of ['', 'orga', 'orga@example', 'a b@example.org']) {
+			const r = parseEventDetails(formData({ ...base, contactEmail }));
+			expect(r).toEqual({ ok: false, errors: ['contact_email'] });
+		}
 	});
 
 	it('takes a valid ride visibility and ignores anything else', () => {
@@ -58,7 +67,8 @@ describe('parseEventDetails', () => {
 				startDate: '2027-07-16',
 				endDate: '2027-07-18',
 				deadlineDate: '2027-07-01',
-				timezone: 'Europe/Berlin'
+				timezone: 'Europe/Berlin',
+				contactEmail: 'orga@example.org'
 			})
 		);
 		expect(r.ok).toBe(true);
@@ -75,7 +85,14 @@ describe('parseEventDetails', () => {
 
 		// a one-day event without times is fine
 		const oneDay = parseEventDetails(
-			formData({ title: 'Ausflug', startDate: '2027-05-01', endDate: '2027-05-01' })
+			formData({
+				...base,
+				startTime: '',
+				endTime: '',
+				title: 'Ausflug',
+				startDate: '2027-05-01',
+				endDate: '2027-05-01'
+			})
 		);
 		expect(oneDay.ok).toBe(true);
 		// mixed: start with time, end without
@@ -112,7 +129,13 @@ describe('parseEventDetails', () => {
 		);
 		expect(r.ok).toBe(false);
 		if (r.ok) return;
-		expect(r.errors).toEqual(['title', 'end_before_start', 'deadline', 'capacity']);
+		expect(r.errors).toEqual([
+			'title',
+			'end_before_start',
+			'deadline',
+			'capacity',
+			'contact_email'
+		]);
 	});
 });
 
@@ -126,6 +149,7 @@ describe('registrationState', () => {
 			registrationDeadline: null,
 			lat: 50,
 			lon: 8,
+			contactEmail: 'orga@example.org',
 			...over
 		}) as Event;
 
@@ -145,5 +169,8 @@ describe('registrationState', () => {
 		expect(publishBlockers(ev({ lat: null, endsAt: new Date(Date.now() + 1e9) }))).toEqual([
 			'location'
 		]);
+		expect(publishBlockers(ev({ contactEmail: null, endsAt: new Date(Date.now() + 1e9) }))).toEqual(
+			['contact']
+		);
 	});
 });

@@ -15,7 +15,7 @@ import {
 } from './db/schema.js';
 
 export { parseEventDetails, publishBlockers, registrationState } from './event-rules.js';
-export type { EventDetails, RegistrationState } from './event-rules.js';
+export type { EventDetails, PublishBlocker, RegistrationState } from './event-rules.js';
 
 const SLUG_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'; // no 0/o, 1/l/i
 const INVITE_DAYS = 7;
@@ -99,6 +99,7 @@ export function duplicateEvent(source: Event, userId: string, titleSuffix: strin
 			timezone: source.timezone,
 			registrationDeadline: source.registrationDeadline,
 			capacity: source.capacity,
+			contactEmail: source.contactEmail ?? '',
 			rideVisibility: source.rideVisibility,
 			startHasTime: source.startHasTime,
 			endHasTime: source.endHasTime,

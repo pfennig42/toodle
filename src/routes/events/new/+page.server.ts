@@ -19,9 +19,9 @@ export const load: PageServerLoad = ({ url, locals }) => {
 	if (id) {
 		const e = getEventForOrganizer(id, locals.user!.id);
 		if (!e) error(404);
-		return { values: formValuesFromEvent(e), id };
+		return { values: formValuesFromEvent(e, locals.user!.email), id };
 	}
-	return { values: emptyFormValues(), id: null };
+	return { values: emptyFormValues(locals.user!.email), id: null };
 };
 
 export const actions: Actions = {

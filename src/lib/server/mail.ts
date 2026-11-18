@@ -28,6 +28,8 @@ export type Mail = {
 	subject: string;
 	text: string;
 	html: string;
+	/** Where answers go – the organizers of the event (the sender itself is a no-reply address) */
+	replyTo?: string;
 	/** one-click-ish unsubscribe target (shown by many mail clients as "Abbestellen") */
 	unsubscribeUrl?: string;
 	attachments?: { filename: string; content: string; contentType: string }[];
@@ -38,12 +40,19 @@ export async function sendMail(mail: Mail) {
 	if (MAIL_OUTBOX) {
 		appendFileSync(
 			MAIL_OUTBOX,
-			JSON.stringify({ to: mail.to, subject: mail.subject, text: mail.text }) + '\n'
+			JSON.stringify({
+				to: mail.to,
+				replyTo: mail.replyTo,
+				subject: mail.subject,
+				text: mail.text
+			}) + '\n'
 		);
 	}
 	const t = getTransporter();
 	if (!t) {
-		console.info(`\n[mail] to=${mail.to} subject=${mail.subject}\n${mail.text}\n`);
+		console.info(
+			`\n[mail] to=${mail.to}${mail.replyTo ? ` reply-to=${mail.replyTo}` : ''} subject=${mail.subject}\n${mail.text}\n`
+		);
 		return;
 	}
 	const { unsubscribeUrl, attachments, ...rest } = mail;
