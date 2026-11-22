@@ -120,7 +120,7 @@ export const actions: Actions = {
 		const driver = data.participants.find((p) => p.registrationId === form.get('driver'));
 		const passenger = data.participants.find((p) => p.registrationId === form.get('passenger'));
 		const actor = { registrationId: me?.registrationId ?? null, isOrganizer };
-		if (!direction || !canLink(actor, driver, passenger, direction))
+		if (!direction || !canLink(actor, driver, passenger, direction, data.links))
 			return fail(403, { error: 'forbidden' as const });
 		// Only with people this participant actually sees (event visibility)
 		if (

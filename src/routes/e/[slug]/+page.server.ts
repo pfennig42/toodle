@@ -1,6 +1,6 @@
 import { m } from '#lib/paraglide/messages.js';
 import { error, fail, redirect } from '@sveltejs/kit';
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 import { utcToZoned } from '#lib/datetime.js';
 import { COMMENT_MAX, type LegInput, type TravelInput } from '#lib/registration.js';
 import { db } from '#lib/server/db/index.js';
@@ -69,7 +69,7 @@ function countDrivers(eventId: string) {
 					eq(registration.eventId, eventId),
 					eq(registration.status, 'active'),
 					eq(travelLeg.direction, 'to'),
-					eq(travelLeg.mode, 'car'),
+					inArray(travelLeg.mode, ['car', 'flexible']),
 					eq(travelLeg.carStatus, 'offering')
 				)
 			)
@@ -108,7 +108,15 @@ function toTravelInput(reg: FullRegistration, e: Event, saved: Saved): TravelInp
 			carStatus: leg.carStatus ?? 'offering',
 			carNote: leg.carNote,
 			pickups: leg.pickups.map((p) => ({
-				point: { name: p.label, address: p.label, area: p.area, lat: p.lat, lon: p.lon },
+				// the stored label already is the public one (see publicName)
+				point: {
+					name: p.label,
+					address: p.label,
+					area: p.area,
+					lat: p.lat,
+					lon: p.lon,
+					shareName: true
+				},
 				time: p.time ? utcToZoned(p.time, e.timezone) : ''
 			}))
 		};
@@ -207,6 +215,7 @@ export const load: PageServerLoad = ({ params, locals, url }) => {
 				direction: l.direction,
 				mode: l.mode,
 				time: l.time,
+				hasClock: l.hasClock,
 				placeLabel: l.placeLabel,
 				placeArea: l.placeArea,
 				carStatus: l.carStatus,
@@ -238,8 +247,9 @@ export const actions: Actions = {
 		const state = registrationState(e);
 		const existing = userId ? getRegistration(e.id, userId) : null;
 		const isActive = existing?.status === 'active';
-		// Somebody typing an address must not be able to change that person's registration.
-		if (guest && isActive) return fail(400, { error: 'guest_taken' as const, ...guestBack });
+		// Somebody typing an address must not be able to change that person's registration –
+		// nor bring back one they withdrew.
+		if (guest && existing) return fail(400, { error: 'guest_taken' as const, ...guestBack });
 
 		// New registrations only while open; existing ones may update travel details until the end.
 		const canRegister = state === 'open' && (isActive || !isFull(e, userId ?? ''));

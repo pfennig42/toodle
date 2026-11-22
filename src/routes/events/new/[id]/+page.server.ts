@@ -42,7 +42,7 @@ export const actions: Actions = {
 
 		// Done – no separate "publish" step. If something still blocks it (e.g. the date is
 		// in the past), the overview explains what is missing.
-		if (e.status === 'draft' && publishBlockers(e).length === 0) {
+		if (e.status === 'draft' && publishBlockers(e, locals.user!).length === 0) {
 			setEventStatus(e.id, 'published');
 			redirect(303, `/events/${e.id}?published=1`);
 		}

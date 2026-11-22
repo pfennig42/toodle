@@ -62,7 +62,8 @@ export async function mockGeocoder(page: Page) {
 		const q = new URL(route.request().url()).searchParams.get('q') ?? '';
 		const hit = GEO_FIXTURES.find((f) => f.match.test(q))!;
 		const { name, address, area, lat, lon } = hit;
-		return route.fulfill({ json: [{ name, address, area, lat, lon }] });
+		// all fixtures are named places (stations, venues) – their names may be shown to others
+		return route.fulfill({ json: [{ name, address, area, lat, lon, shareName: true }] });
 	});
 }
 

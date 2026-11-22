@@ -11,7 +11,28 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter()
+			adapter: adapter(),
+			// Everything comes from this origin: map tiles and the address search are proxied
+			// (/api/tiles, /api/geocode), external URLs are plain links. SvelteKit adds nonces for
+			// its inline scripts. Inline styles stay allowed (style attributes from Svelte and
+			// Leaflet) – they can't run code.
+			csp: {
+				mode: 'auto',
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self'],
+					'style-src': ['self', 'unsafe-inline'],
+					'img-src': ['self', 'data:', 'blob:'],
+					'font-src': ['self'],
+					'connect-src': ['self'],
+					'worker-src': ['self'],
+					'manifest-src': ['self'],
+					'object-src': ['none'],
+					'base-uri': ['self'],
+					'form-action': ['self'],
+					'frame-ancestors': ['none']
+				}
+			}
 		}),
 
 		paraglideVitePlugin({

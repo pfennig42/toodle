@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { tick } from 'svelte';
 	import { m } from '#lib/paraglide/messages.js';
 	import { contactName } from '#lib/labels.js';
@@ -66,6 +67,17 @@
 	<a class="back" href={data.back.href}>← {m.profile_back_to({ title: data.back.title })}</a>
 {/if}
 <h1>{m.profile_title()}</h1>
+
+<!-- confirmation link requested from an event page without JavaScript -->
+{#if form && form.section === 'verify'}
+	{#if 'sent' in form}
+		<p role="status">{m.event_verify_sent({ email: data.profile.email })}</p>
+	{:else if 'error' in form}
+		<p class="error" role="alert">
+			{form.error === 'rate' ? m.event_verify_rate() : m.event_verify_error()}
+		</p>
+	{/if}
+{/if}
 
 <div class="stack-lg">
 	<section class="card">
@@ -312,6 +324,20 @@
 	<section class="card danger-zone">
 		<h2>{m.profile_delete_title()}</h2>
 		<p class="muted small">{m.profile_delete_hint()}</p>
+		{#if data.soleEvents.length}
+			<div class="small">
+				<p class="error">{m.profile_delete_events()}</p>
+				<ul>
+					{#each data.soleEvents as e (e.id)}
+						<li>
+							<a href={resolve('/events/[id]', { id: e.id })}>{e.title}</a>{#if e.upcoming}
+								<span class="muted"> · {m.profile_delete_event_notified()}</span>{/if}
+						</li>
+					{/each}
+				</ul>
+				<p class="muted">{m.profile_delete_events_hint()}</p>
+			</div>
+		{/if}
 		<form method="post" action="?/deleteAccount" class="stack">
 			<label class="field">
 				<span>{m.profile_delete_confirm({ email: data.profile.email })}</span>

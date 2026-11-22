@@ -20,6 +20,7 @@ const leg = (over: Partial<RideLeg>): RideLeg => ({
 	lon: null,
 	carStatus: null,
 	carNote: '',
+	hasClock: true,
 	pickups: [],
 	...over
 });
@@ -54,6 +55,18 @@ describe('rideMatchNotices', () => {
 	it('pairs seekers with offering drivers on their way, both directions of the pair', () => {
 		const pairs = notices.map((n) => `${n.userId}→${n.other.name}`).sort();
 		expect(pairs).toEqual(['u-Anna→Lea', 'u-Anna→Tim', 'u-Lea→Anna', 'u-Tim→Anna']);
+	});
+
+	it('announces two flexible people to each other only once', () => {
+		const flex = (name: string, lon: number) =>
+			person(
+				name,
+				leg({ mode: 'flexible', placeArea: 'Köln', lat: 50.94, lon, carStatus: 'offering' })
+			);
+		const pairs = rideMatchNotices([flex('Fia', 6.96), flex('Max', 6.97)], [], EVENT, ['to']).map(
+			(n) => `${n.userId}→${n.other.name}`
+		);
+		expect(pairs.sort()).toEqual(['u-Fia→Max', 'u-Max→Fia']);
 	});
 
 	it('names the station for public transport users', () => {

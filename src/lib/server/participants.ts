@@ -19,6 +19,8 @@ export type OrgaLeg = {
 	direction: TravelDirection;
 	mode: TravelMode;
 	time: Date | null;
+	/** false: only the day was given */
+	hasClock: boolean;
 	placeLabel: string | null;
 	placeArea: string | null;
 	lat: number | null;
@@ -131,6 +133,7 @@ export function listParticipants(eventId: string): OrgaParticipant[] {
 					direction: l.direction,
 					mode: l.mode,
 					time: l.time,
+					hasClock: l.hasClock,
 					placeLabel: l.placeLabel,
 					placeArea: l.placeArea,
 					lat: l.lat,

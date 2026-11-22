@@ -3,26 +3,18 @@
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { landing } from '#lib/landing.js';
 
-	/** What toodle.lu is – shown on / when logged out and on /about. */
-	const t = $derived(landing(getLocale()));
+	/** What toodle does – shown on / when logged out. The personal part is on /about. */
+	const t = $derived(landing(getLocale()).home);
 </script>
 
 <div class="landing">
-	<section class="hero">
-		<h1>{t.hero.title}</h1>
-		<p class="lead">{t.hero.text}</p>
+	<section>
+		<h1>{t.intro.title}</h1>
+		<p class="lead">{t.intro.text}</p>
 		<div class="cta">
-			<a class="btn btn-primary" href={resolve('/events/new')}>{t.hero.cta}</a>
-			<p class="muted small">{t.hero.note}</p>
+			<a class="btn btn-primary" href={resolve('/events/new')}>{t.intro.cta}</a>
+			<p class="muted small">{t.intro.note}</p>
 		</div>
-	</section>
-
-	<section class="why">
-		<h2>{t.why.title}</h2>
-		{#each t.why.paragraphs as p, i (i)}
-			<p>{p}</p>
-		{/each}
-		<p class="sign">pfennig</p>
 	</section>
 
 	<section>
@@ -38,51 +30,42 @@
 	</section>
 
 	<section>
-		<h2>{t.not.title}</h2>
-		<ul class="nope">
-			{#each t.not.items as item, i (i)}
-				<li>{item}</li>
-			{/each}
-		</ul>
-		<p>{t.not.after}</p>
+		<h2>{t.features.title}</h2>
+		{#each t.features.groups as group, i (i)}
+			<h3>{group.title}</h3>
+			<ul class="plain">
+				{#each group.items as item, j (j)}
+					<li>{item}</li>
+				{/each}
+			</ul>
+		{/each}
 	</section>
 
 	<section>
-		<h2>{t.orga.title}</h2>
+		<h2>{t.fit.title}</h2>
+		<p>{t.fit.text}</p>
 		<ul class="plain">
-			{#each t.orga.items as item, i (i)}
+			{#each t.fit.items as item, i (i)}
+				<li>{item}</li>
+			{/each}
+		</ul>
+		<p>{t.fit.after}</p>
+	</section>
+
+	<section>
+		<h2>{t.privacy.title}</h2>
+		<ul class="plain">
+			{#each t.privacy.items as item, i (i)}
 				<li>{item}</li>
 			{/each}
 		</ul>
 	</section>
 
-	<section>
-		<h2>{t.costs.title}</h2>
-		<p>
-			{t.costs.before}<a href="https://pfennig.tech" rel="noopener">pfennig</a>{t.costs.after}
-		</p>
-		<p>
-			{t.costs.coffee}
-			<a href="https://buymeacoffee.com/pfennig42" rel="noopener">buymeacoffee.com/pfennig42</a>
-		</p>
-		<p class="muted small links">
-			<a href="https://pfennig.tech" rel="noopener">pfennig.tech</a>
-			·
-			<a href="https://chaos.social/@pfennig" rel="me noopener">@pfennig@chaos.social</a>
-		</p>
-	</section>
-
-	<section>
-		<h2>{t.faq.title}</h2>
-		<dl class="faq">
-			{#each t.faq.items as item, i (i)}
-				<div>
-					<dt>{item.q}</dt>
-					<dd>{item.a}</dd>
-				</div>
-			{/each}
-		</dl>
-	</section>
+	<p class="article muted">
+		{t.article.before}<a href="https://blog.pfennig.tech/toodle.html" rel="noopener"
+			>{t.article.link}</a
+		>{t.article.after}
+	</p>
 </div>
 
 <style>
@@ -97,14 +80,18 @@
 
 	h1 {
 		margin: 0 0 var(--space-4);
-		font-size: clamp(1.9rem, 6vw, 2.6rem);
-		line-height: 1.15;
-		letter-spacing: -0.01em;
+		font-size: clamp(1.7rem, 5vw, 2.2rem);
+		line-height: 1.2;
 	}
 
 	h2 {
 		margin: 0 0 var(--space-3);
 		font-size: 1.25rem;
+	}
+
+	h3 {
+		margin: var(--space-4) 0 var(--space-2);
+		font-size: 1rem;
 	}
 
 	p {
@@ -117,7 +104,7 @@
 	}
 
 	.lead {
-		font-size: 1.1rem;
+		font-size: 1.05rem;
 	}
 
 	.cta {
@@ -130,21 +117,6 @@
 
 	.cta p {
 		margin: 0;
-	}
-
-	/* --- the personal part */
-	.why {
-		padding-left: var(--space-4);
-		border-left: 3px solid var(--accent);
-	}
-
-	.why p:not(.sign) {
-		font-size: 1.05rem;
-	}
-
-	.sign {
-		color: var(--text-muted);
-		font-style: italic;
 	}
 
 	.steps {
@@ -160,7 +132,6 @@
 		font-weight: 700;
 	}
 
-	.nope,
 	.plain {
 		margin: 0 0 var(--space-3);
 		padding: 0;
@@ -170,46 +141,22 @@
 		line-height: 1.5;
 	}
 
-	.nope li,
 	.plain li {
 		position: relative;
 		padding-left: 1.5rem;
 	}
 
-	.nope li::before,
-	.plain li::before {
-		position: absolute;
-		left: 0;
-		color: var(--text-muted);
-	}
-
-	.nope li::before {
-		content: '✕';
-	}
-
 	.plain li::before {
 		content: '•';
+		position: absolute;
+		left: 0;
 		color: var(--accent);
 		font-weight: 700;
 	}
 
-	.links {
-		margin-top: var(--space-2);
-	}
-
-	.faq {
+	.article {
 		margin: 0;
-		display: grid;
-		gap: var(--space-4);
-	}
-
-	.faq dt {
-		font-weight: 600;
-		margin-bottom: var(--space-1);
-	}
-
-	.faq dd {
-		margin: 0;
-		line-height: 1.6;
+		padding-top: var(--space-4);
+		border-top: 1px solid var(--border);
 	}
 </style>

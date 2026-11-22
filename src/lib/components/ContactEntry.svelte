@@ -41,7 +41,11 @@
 		name="value"
 		class="value"
 		aria-label={m.contact_value()}
-		placeholder={other ? m.contact_other_value_placeholder() : undefined}
+		placeholder={other
+			? m.contact_other_value_placeholder()
+			: kind === 'phone' || kind === 'whatsapp' || kind === 'signal'
+				? m.contact_phone_placeholder()
+				: undefined}
 		{required}
 		bind:value
 		bind:this={input}

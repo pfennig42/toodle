@@ -1,7 +1,14 @@
 import { error, fail } from '@sveltejs/kit';
 import type { TravelDirection } from '#lib/forms.js';
-import { getEventForOrganizer, listFields } from '#lib/server/events.js';
-import { bestMatch, isDriver, isSeeker, searchPoints } from '#lib/server/ride-matching.js';
+import { getEventForOrganizer, requireOrganizerEvent, listFields } from '#lib/server/events.js';
+import {
+	bestMatch,
+	canLink,
+	drivesNow,
+	isSeeker,
+	searchPoints,
+	seeksNow
+} from '#lib/server/ride-matching.js';
 import { publicLeg } from '#lib/server/ride-view.js';
 import { getLink, linkRide, loadRideData, unlinkRide } from '#lib/server/rides.js';
 import { notifyRideLink } from '#lib/server/notifications.js';
@@ -9,7 +16,7 @@ import { rideTravelTime } from '#lib/server/routing.js';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	const e = getEventForOrganizer(params.id, locals.user!.id)!;
+	const e = requireOrganizerEvent(params.id, locals.user!.id);
 	const directions: TravelDirection[] =
 		listFields(e.id).find((f) => f.type === 'travel')?.config.directions ?? [];
 	const { participants, links } = loadRideData(e.id);
@@ -20,7 +27,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 	const overview = directions.map((direction) => {
 		const dirLinks = links.filter((l) => l.direction === direction);
 		const assigned = new Set(dirLinks.map((l) => l.passengerRegistrationId));
-		const drivers = participants.filter((p) => isDriver(p.legs[direction]));
+		const drivers = participants.filter((p) => drivesNow(p, direction, dirLinks));
 
 		return {
 			direction,
@@ -33,7 +40,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 					.map((l) => ({ linkId: l.id, name: byId.get(l.passengerRegistrationId)?.name ?? '?' }))
 			})),
 			openSeekers: participants
-				.filter((p) => isSeeker(p.legs[direction]) && !assigned.has(p.registrationId))
+				.filter((p) => seeksNow(p, direction, dirLinks) && !assigned.has(p.registrationId))
 				.map((s) => {
 					const leg = s.legs[direction]!;
 					const pts = searchPoints(leg);
@@ -43,6 +50,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 						leg: publicLeg(leg),
 						// Drivers sorted by detour for this person – the organizer picks one.
 						options: drivers
+							.filter((d) => d !== s)
 							.map((d) => ({
 								registrationId: d.registrationId,
 								name: d.name,
@@ -66,7 +74,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 			counts: {
 				drivers: drivers.length,
 				offering: drivers.filter((d) => d.legs[direction]!.carStatus === 'offering').length,
-				seekers: participants.filter((p) => isSeeker(p.legs[direction])).length,
+				seekers: participants.filter((p) => seeksNow(p, direction, dirLinks)).length,
 				assigned: assigned.size,
 				transitOnly: participants.filter(
 					(p) => p.legs[direction]?.mode === 'transit' && !isSeeker(p.legs[direction])
@@ -85,10 +93,11 @@ export const actions: Actions = {
 		const form = await request.formData();
 		const direction = form.get('direction');
 		if (direction !== 'to' && direction !== 'from') return fail(400);
-		const { participants } = loadRideData(e.id);
+		const { participants, links } = loadRideData(e.id);
 		const driver = participants.find((p) => p.registrationId === form.get('driver'));
 		const passenger = participants.find((p) => p.registrationId === form.get('passenger'));
-		if (!driver || !passenger || !isDriver(driver.legs[direction]) || driver === passenger)
+		const organizer = { registrationId: null, isOrganizer: true };
+		if (!driver || !passenger || !canLink(organizer, driver, passenger, direction, links))
 			return fail(400, { error: 'invalid' as const });
 		linkRide(e.id, direction, driver.registrationId, passenger.registrationId, locals.user!.id);
 		void notifyRideLink(

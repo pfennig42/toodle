@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatRange, utcToZoned, zonedToUtc } from './datetime';
+import { addLocalDays, dayDifference, formatRange, utcToZoned, zonedToUtc } from './datetime';
 
 describe('zonedToUtc / utcToZoned', () => {
 	it('converts summer time (CEST, UTC+2)', () => {
@@ -72,5 +72,22 @@ describe('formatRange', () => {
 			endHasTime: false
 		});
 		expect(startOnly).toMatch(/16\. Juli 2027.*18:00 – So\., 18\. Juli$/);
+	});
+});
+
+describe('dayDifference / addLocalDays', () => {
+	const tz = 'Europe/Luxembourg';
+	const at = (local: string) => zonedToUtc(local, tz)!;
+
+	it('counts calendar days, not 24-hour blocks', () => {
+		expect(dayDifference(at('2027-07-16T23:30'), at('2027-07-17T00:30'), tz)).toBe(1);
+		expect(dayDifference(at('2027-07-16T18:00'), at('2027-07-16T09:00'), tz)).toBe(0);
+		expect(dayDifference(at('2027-07-23T10:00'), at('2027-07-16T10:00'), tz)).toBe(-7);
+	});
+
+	it('keeps the time of day across the switch to winter time', () => {
+		// 30/31 October 2027: CEST → CET
+		const moved = addLocalDays(at('2027-10-29T14:00'), 3, tz);
+		expect(utcToZoned(moved, tz)).toBe('2027-11-01T14:00');
 	});
 });

@@ -37,7 +37,7 @@ const uniqueEmail = (who: string) => `${who}.${Date.now()}.${test.info().project
 async function answerQuestions(page: Page) {
 	await page
 		.getByRole('group', { name: 'Anreise', exact: true })
-		.getByRole('radio', { name: /Keine Angabe/ })
+		.getByRole('radio', { name: /Egal/ })
 		.click();
 	await page.getByRole('radio', { name: 'Alles' }).check();
 }

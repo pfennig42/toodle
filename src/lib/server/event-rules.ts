@@ -1,4 +1,4 @@
-import { isValidTimeZone, zonedDateTime } from '../datetime.js';
+import { dayDifference, isValidTimeZone, zonedDateTime } from '../datetime.js';
 import { isRideVisibility, type RideVisibility } from '../ride-visibility.js';
 import { normalizeEmail } from './auth/validation.js';
 import type { Event } from './db/schema.js';
@@ -128,11 +128,50 @@ export function parseEventDetails(
 	};
 }
 
-/** Everything needed before an event can go public. */
-export type PublishBlocker = 'location' | 'contact' | 'past';
+/**
+ * What changed for the people registered (docs/konzept.md 4.7): the dates – and by how many
+ * calendar days arrival and departure move – and the place.
+ */
+export type DetailsChange = {
+	when: boolean;
+	where: boolean;
+	/** calendar days the first / last day moved (travel plans move along) */
+	shiftDays: { to: number; from: number };
+};
 
-export function publishBlockers(e: Event): PublishBlocker[] {
+export function detailsChange(before: Event, after: EventDetails): DetailsChange {
+	const tz = after.timezone;
+	const when =
+		before.startsAt.getTime() !== after.startsAt.getTime() ||
+		before.endsAt.getTime() !== after.endsAt.getTime() ||
+		before.startHasTime !== after.startHasTime ||
+		before.endHasTime !== after.endHasTime;
+	const where =
+		before.lat !== after.lat ||
+		before.lon !== after.lon ||
+		before.locationName !== after.locationName ||
+		(before.locationAddress ?? null) !== after.locationAddress;
+	return {
+		when,
+		where,
+		shiftDays: {
+			to: dayDifference(before.startsAt, after.startsAt, tz),
+			from: dayDifference(before.endsAt, after.endsAt, tz)
+		}
+	};
+}
+
+/** Everything needed before an event can go public. */
+export type PublishBlocker = 'location' | 'contact' | 'past' | 'unverified';
+
+/**
+ * `organizer`: whoever publishes. Only somebody who proved their e-mail address may – otherwise
+ * anybody could, without an account, make toodle send mails with their own text (the event
+ * title) to any address, by registering those addresses as guests.
+ */
+export function publishBlockers(e: Event, organizer: { emailVerified: boolean }): PublishBlocker[] {
 	const blockers: PublishBlocker[] = [];
+	if (!organizer.emailVerified) blockers.push('unverified');
 	if (e.lat === null || e.lon === null) blockers.push('location');
 	if (!e.contactEmail) blockers.push('contact');
 	if (e.endsAt.getTime() < Date.now()) blockers.push('past');

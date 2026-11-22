@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { error } from '@sveltejs/kit';
 import { and, asc, eq, gt, lt, notInArray } from 'drizzle-orm';
 import type { FieldDef } from '../forms.js';
 import type { EventDetails } from './event-rules.js';
@@ -14,8 +15,18 @@ import {
 	type EventStatus
 } from './db/schema.js';
 
-export { parseEventDetails, publishBlockers, registrationState } from './event-rules.js';
-export type { EventDetails, PublishBlocker, RegistrationState } from './event-rules.js';
+export {
+	detailsChange,
+	parseEventDetails,
+	publishBlockers,
+	registrationState
+} from './event-rules.js';
+export type {
+	DetailsChange,
+	EventDetails,
+	PublishBlocker,
+	RegistrationState
+} from './event-rules.js';
 
 const SLUG_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'; // no 0/o, 1/l/i
 const INVITE_DAYS = 7;
@@ -71,8 +82,14 @@ export function setRegistrationClosed(eventId: string, closed: boolean) {
 		.run();
 }
 
+/** Deletes the event with everything attached. Tell the participants first (cancellationMails). */
 export function deleteEvent(eventId: string) {
 	db.delete(event).where(eq(event.id, eventId)).run();
+}
+
+/** Events this user organizes without anybody else – they'd be left without a team. */
+export function soleOrganizedEvents(userId: string): Event[] {
+	return listEventsForOrganizer(userId).filter((e) => listOrganizers(e.id).length === 1);
 }
 
 /** Copies details and form (not registrations, not the team) into a new draft. */
@@ -119,6 +136,18 @@ export function getEventForOrganizer(eventId: string, userId: string): Event | n
 		.where(and(eq(event.id, eventId), eq(eventOrganizer.userId, userId)))
 		.get();
 	return row?.event ?? null;
+}
+
+/**
+ * The event for an organizer page – 404 for everybody else. Every load and action under
+ * /events/[id] must call this itself: SvelteKit runs page loads in parallel with the layout
+ * (and skips the layout entirely on client-side navigation), so the layout's check alone
+ * does not keep a page's data from being sent.
+ */
+export function requireOrganizerEvent(eventId: string, userId: string): Event {
+	const e = getEventForOrganizer(eventId, userId);
+	if (!e) error(404);
+	return e;
 }
 
 export function getEventBySlug(slug: string): Event | null {

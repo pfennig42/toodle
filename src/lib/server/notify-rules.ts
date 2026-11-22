@@ -9,9 +9,9 @@ import type { TravelDirection } from '../forms.js';
 import type { TravelMode } from '../registration.js';
 import {
 	bestMatch,
-	isDriver,
+	drivesNow,
 	isGoodMatch,
-	isSeeker,
+	seeksNow,
 	searchPoints,
 	type Link,
 	type Participant,
@@ -49,14 +49,13 @@ export function rideMatchNotices(
 ): MatchNotice[] {
 	const out: MatchNotice[] = [];
 	for (const direction of directions) {
-		const taken = new Set(
-			links.filter((l) => l.direction === direction).map((l) => l.passengerRegistrationId)
-		);
+		const dirLinks = links.filter((l) => l.direction === direction);
+		const taken = new Set(dirLinks.map((l) => l.passengerRegistrationId));
 		const drivers = participants.filter(
-			(p) => isDriver(p.legs[direction]) && p.legs[direction]!.carStatus === 'offering'
+			(p) => drivesNow(p, direction, dirLinks) && p.legs[direction]!.carStatus === 'offering'
 		);
 		const seekers = participants.filter(
-			(p) => isSeeker(p.legs[direction]) && !taken.has(p.registrationId)
+			(p) => seeksNow(p, direction, dirLinks) && !taken.has(p.registrationId)
 		);
 		for (const s of seekers) {
 			const points = searchPoints(s.legs[direction]);
@@ -91,7 +90,14 @@ export function rideMatchNotices(
 			}
 		}
 	}
-	return out;
+	// Two flexible people meet twice (each as driver and as seeker) – announce each pair once.
+	const seen = new Set<string>();
+	return out.filter((n) => {
+		const key = `${n.userId}|${matchRef(n)}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
 }
 
 /** Directions that still lie ahead – nobody needs ride offers for a trip in the past. */

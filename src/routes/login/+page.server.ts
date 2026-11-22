@@ -1,13 +1,12 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { m } from '#lib/paraglide/messages.js';
 import { db } from '#lib/server/db/index.js';
 import { user } from '#lib/server/db/schema.js';
-import { afterLoginTarget, createLoginToken, createSession } from '#lib/server/auth/index.js';
+import { afterLoginTarget, createSession } from '#lib/server/auth/index.js';
+import { sendLoginLink } from '#lib/server/auth/login-link.js';
 import { DUMMY_HASH, verifyPassword } from '#lib/server/auth/crypto.js';
 import { createRateLimiter } from '#lib/server/auth/rate-limit.js';
 import { normalizeEmail, safeNext } from '#lib/server/auth/validation.js';
-import { renderMail, sendMail } from '#lib/server/mail.js';
 import { getEventBySlug, registrationState } from '#lib/server/events.js';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -34,20 +33,6 @@ function invitingEvent(next: string | null) {
 	const e = slug ? getEventBySlug(slug) : null;
 	if (!e || registrationState(e) !== 'open') return null;
 	return { title: e.title, slug: e.slug };
-}
-
-async function sendLoginLink(email: string, next: string | null, origin: string) {
-	const token = createLoginToken(email, next);
-	const link = `${origin}/auth/link?token=${encodeURIComponent(token)}`;
-	await sendMail({
-		to: email,
-		subject: m.mail_login_subject(),
-		...renderMail({
-			paragraphs: [m.mail_login_intro(), m.mail_login_validity()],
-			action: { label: m.mail_login_button(), url: link },
-			footer: m.mail_login_footer()
-		})
-	});
 }
 
 export const actions: Actions = {

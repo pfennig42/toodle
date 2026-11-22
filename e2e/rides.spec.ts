@@ -146,7 +146,7 @@ test('participants find and connect rides; organizers assign them', async ({
 	await annaEdit.getByRole('button', { name: 'Anmeldung bearbeiten' }).click();
 	await annaEdit
 		.getByRole('group', { name: 'Anreise', exact: true })
-		.getByRole('radio', { name: /Keine Angabe/ })
+		.getByRole('radio', { name: /Egal/ })
 		.click();
 	await annaEdit.getByRole('button', { name: 'Änderungen speichern' }).click();
 	await expect(annaEdit.getByText('Deine Anmeldung wurde aktualisiert.')).toBeVisible();

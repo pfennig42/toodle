@@ -1,4 +1,6 @@
 import { and, asc, eq, inArray, ne, count } from 'drizzle-orm';
+import { addLocalDays } from '../datetime.js';
+import type { TravelDirection } from '../forms.js';
 import type { AnswerValue } from '../registration.js';
 import { db } from './db/index.js';
 import { answer, event, pickupOption, registration, travelLeg, type Event } from './db/schema.js';
@@ -134,6 +136,43 @@ export function saveRegistration(input: {
 		}
 		// e.g. a driver switched to the train – their passengers are free again
 		cleanupRideLinks(input.eventId);
+	});
+}
+
+/**
+ * The event moved to other days: travel plans move along by the same number of calendar days,
+ * keeping their time of day (arrival with the first day, departure with the last).
+ */
+export function shiftTravelDays(
+	eventId: string,
+	shift: Record<TravelDirection, number>,
+	timezone: string
+) {
+	if (!shift.to && !shift.from) return;
+	db.transaction(() => {
+		const legs = db
+			.select({ id: travelLeg.id, direction: travelLeg.direction, time: travelLeg.time })
+			.from(travelLeg)
+			.innerJoin(registration, eq(registration.id, travelLeg.registrationId))
+			.where(eq(registration.eventId, eventId))
+			.all();
+		for (const leg of legs) {
+			const days = shift[leg.direction];
+			if (!days) continue;
+			if (leg.time) {
+				db.update(travelLeg)
+					.set({ time: addLocalDays(leg.time, days, timezone) })
+					.where(eq(travelLeg.id, leg.id))
+					.run();
+			}
+			for (const p of db.select().from(pickupOption).where(eq(pickupOption.legId, leg.id)).all()) {
+				if (!p.time) continue;
+				db.update(pickupOption)
+					.set({ time: addLocalDays(p.time, days, timezone) })
+					.where(eq(pickupOption.id, p.id))
+					.run();
+			}
+		}
 	});
 }
 

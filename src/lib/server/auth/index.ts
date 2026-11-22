@@ -13,6 +13,8 @@ const DAY = 24 * 60 * 60 * 1000;
 
 export type SessionUser = Pick<User, 'id' | 'email' | 'name' | 'locale' | 'onboardedAt'> & {
 	hasPassword: boolean;
+	/** Proved the address via magic link – silent guest accounts haven't (docs/konzept.md 5) */
+	emailVerified: boolean;
 };
 
 export function createSession(userId: string, cookies: Cookies) {
@@ -55,8 +57,16 @@ export function validateSession(cookies: Cookies): SessionUser | null {
 		db.update(session).set({ expiresAt }).where(eq(session.id, id)).run();
 		setSessionCookie(cookies, token, expiresAt);
 	}
-	const { id: userId, email, name, locale, onboardedAt, passwordHash } = row.user;
-	return { id: userId, email, name, locale, onboardedAt, hasPassword: passwordHash !== null };
+	const { id: userId, email, name, locale, onboardedAt, passwordHash, emailVerifiedAt } = row.user;
+	return {
+		id: userId,
+		email,
+		name,
+		locale,
+		onboardedAt,
+		hasPassword: passwordHash !== null,
+		emailVerified: emailVerifiedAt !== null
+	};
 }
 
 export function destroySession(cookies: Cookies) {

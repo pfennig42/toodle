@@ -65,6 +65,9 @@ test('participant looks for a ride with alternative pick-up points, edits and wi
 
 	// Arrival: looking for a ride – home (saved place, suggested) or one of two stations
 	await leg(page, 'Anreise')
+		.getByRole('radio', { name: /Gemeinsam fahren/ })
+		.click();
+	await leg(page, 'Anreise')
 		.getByRole('radio', { name: /Suche Mitfahrt/ })
 		.click();
 	await expect(leg(page, 'Anreise').getByText('📍 Zuhause')).toBeVisible();
@@ -186,9 +189,7 @@ test('full events and passed deadlines', async ({ page, context, browser }) => {
 	await mockGeocoder(page);
 	await page.goto(`/e/${slug}`);
 	await ready(page);
-	await leg(page, 'Anreise')
-		.getByRole('radio', { name: /Keine Angabe/ })
-		.click();
+	await leg(page, 'Anreise').getByRole('radio', { name: /Egal/ }).click();
 	// the return trip follows ("same way back")
 	await expect(page.getByText(/↩ Rückfahrt genauso/)).toBeVisible();
 	await page.getByRole('radio', { name: 'Alles' }).check();
@@ -201,6 +202,9 @@ test('full events and passed deadlines', async ({ page, context, browser }) => {
 	await page.getByRole('button', { name: 'Reise bearbeiten' }).click();
 	await expect(page.getByRole('radio', { name: 'Alles' })).toBeDisabled();
 	await expect(page.getByText(/Die Anmeldefrist ist vorbei/)).toBeVisible();
+	await leg(page, 'Anreise')
+		.getByRole('radio', { name: /Gemeinsam fahren/ })
+		.click();
 	await leg(page, 'Anreise')
 		.getByRole('radio', { name: /Suche Mitfahrt/ })
 		.click();

@@ -195,7 +195,7 @@
 								<p class="small muted">✓ {m.rides_rides_with({ name: s.driver.name })}</p>
 							{/if}
 							<ContactButtons contacts={s.contacts} />
-							{#if v.role === 'driver' && !s.driver}
+							{#if (v.role === 'driver' || v.role === 'flexible') && !s.driver}
 								<form method="post" action="?/link" use:enhance>
 									<input type="hidden" name="direction" value={dir} />
 									<input type="hidden" name="driver" value={myId} />
@@ -268,6 +268,11 @@
 		<p class="card note">{m.rides_internal_note()}</p>
 	{:else if data.visibility === 'matched' && v.role === 'other'}
 		<p class="card note">{m.rides_matched_no_leg()}</p>
+	{:else if v.role === 'flexible'}
+		<!-- drives or rides along: both lists, whatever fits better -->
+		<p class="muted small">{m.rides_flexible_hint()}</p>
+		{@render driverList()}
+		{@render seekerList(m.rides_seekers_on_route(), m.rides_seekers_hint())}
 	{:else if v.role === 'driver'}
 		{@render seekerList(m.rides_seekers_on_route(), m.rides_seekers_hint())}
 		{#if v.drivers.length}

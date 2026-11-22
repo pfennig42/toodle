@@ -71,4 +71,35 @@ const handleUserLocale: Handle = ({ event, resolve }) => {
 	return resolve(event);
 };
 
-export const handle: Handle = sequence(handleTheme, handleParaglide, handleAuth, handleUserLocale);
+/**
+ * Security headers for every response (the CSP itself is configured in vite.config.ts).
+ * Set here rather than in the reverse proxy, so every self-hosted instance has them.
+ */
+const SECURITY_HEADERS: Record<string, string> = {
+	'x-content-type-options': 'nosniff',
+	// no embedding in other sites (clickjacking) – older browsers; CSP frame-ancestors for the rest
+	'x-frame-options': 'DENY',
+	// links to messengers and maps don't learn which event page somebody came from
+	'referrer-policy': 'same-origin',
+	'cross-origin-opener-policy': 'same-origin',
+	'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()'
+};
+
+const handleSecurityHeaders: Handle = async ({ event, resolve }) => {
+	const response = await resolve(event);
+	for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+		if (!response.headers.has(name)) response.headers.set(name, value);
+	}
+	if (event.url.protocol === 'https:' && !response.headers.has('strict-transport-security')) {
+		response.headers.set('strict-transport-security', 'max-age=31536000');
+	}
+	return response;
+};
+
+export const handle: Handle = sequence(
+	handleSecurityHeaders,
+	handleTheme,
+	handleParaglide,
+	handleAuth,
+	handleUserLocale
+);

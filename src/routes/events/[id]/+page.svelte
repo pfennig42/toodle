@@ -5,6 +5,7 @@
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatDateTime, formatRange } from '#lib/datetime.js';
 	import { LARGE_EVENT } from '#lib/ride-visibility.js';
+	import PublishBlockers from '#lib/components/PublishBlockers.svelte';
 	import ShareBox from '#lib/components/ShareBox.svelte';
 	import type { PageProps } from './$types';
 
@@ -32,15 +33,7 @@
 		<section class="draft stack" aria-labelledby="draft-title">
 			<h2 id="draft-title">{m.overview_draft_title()}</h2>
 			<p class="muted">{m.event_status_draft_hint()}</p>
-			{#if o.blockers.includes('location')}
-				<p class="error small">{m.event_blocker_location()}</p>
-			{/if}
-			{#if o.blockers.includes('contact')}
-				<p class="error small">{m.event_blocker_contact()}</p>
-			{/if}
-			{#if o.blockers.includes('past')}
-				<p class="error small">{m.event_blocker_past()}</p>
-			{/if}
+			<PublishBlockers blockers={o.blockers} email={data.email} />
 			{#if form?.error === 'blocked'}<p class="error small">{m.event_blocker_generic()}</p>{/if}
 			<div class="actions">
 				<form method="post" action="?/publish" use:enhance>

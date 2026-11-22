@@ -27,7 +27,11 @@
 			registrations={data.registrations}
 		/>
 	{/key}
-	{#if form?.saved}<p class="muted small saved" role="status">{m.saved()}</p>{/if}
+	{#if form?.saved}
+		<p class="muted small saved" role="status">
+			{form.notified ? `${m.saved()} ${m.details_notified()}` : m.saved()}
+		</p>
+	{/if}
 </form>
 
 <style>

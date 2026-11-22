@@ -2,16 +2,17 @@ import { error, fail } from '@sveltejs/kit';
 import {
 	createOrganizerInvite,
 	getEventForOrganizer,
+	requireOrganizerEvent,
 	listOrganizers,
 	pendingInviteCount,
 	removeOrganizer
 } from '#lib/server/events.js';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ params }) => ({
-	team: listOrganizers(params.id),
-	pendingInvites: pendingInviteCount(params.id)
-});
+export const load: PageServerLoad = ({ params, locals }) => {
+	const e = requireOrganizerEvent(params.id, locals.user!.id);
+	return { team: listOrganizers(e.id), pendingInvites: pendingInviteCount(e.id) };
+};
 
 export const actions: Actions = {
 	invite: ({ params, locals, url }) => {

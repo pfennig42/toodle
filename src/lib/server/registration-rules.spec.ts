@@ -80,7 +80,8 @@ describe('parseTravel', () => {
 		address: `${name}, Bahnhofstr. 1`,
 		area: name.split(' ')[0],
 		lat,
-		lon: 8.1
+		lon: 8.1,
+		shareName: true
 	});
 
 	it('resolves saved places and accepts several pick-up alternatives', () => {
@@ -122,6 +123,43 @@ describe('parseTravel', () => {
 		});
 	});
 
+	it('never shows a street address as pick-up – only the area', () => {
+		const address = {
+			name: 'Venloer Straße 12',
+			address: 'Venloer Straße 12, 50672 Köln',
+			area: 'Köln-Neustadt-Nord',
+			lat: 50.94,
+			lon: 6.93
+		};
+		const r = parseTravel(
+			{
+				to: {
+					mode: 'seeking',
+					pickups: [
+						{ point: address, time: '' },
+						// a client claiming "shareable" with anything but `true` doesn't count
+						{ point: { ...address, shareName: 'yes' }, time: '' },
+						{ point: null, savedId: 'p1', time: '' },
+						{ point: station('Waldheim Bahnhof', 50.9), time: '' }
+					]
+				},
+				from: { mode: 'car', place: { kind: 'custom', label: '', point: address } }
+			},
+			opts
+		);
+		expect(r.ok).toBe(true);
+		if (!r.ok) return;
+		const [to, from] = r.legs;
+		expect(to.pickups.map((p) => p.label)).toEqual([
+			'Köln-Neustadt-Nord',
+			'Köln-Neustadt-Nord',
+			'Zuhause',
+			'Waldheim Bahnhof'
+		]);
+		expect(from.place?.label).toBe('Köln-Neustadt-Nord');
+		expect(from.place?.address).toBe('Venloer Straße 12, 50672 Köln');
+	});
+
 	it('requires a mode for required travel fields', () => {
 		expect(parseTravel({ to: { mode: null } }, opts)).toEqual({
 			ok: false,
@@ -137,6 +175,29 @@ describe('parseTravel', () => {
 	it('needs a start place for drivers and ride seekers', () => {
 		const r = parseTravel({ to: { mode: 'car', place: null }, from: { mode: 'undecided' } }, opts);
 		expect(r).toEqual({ ok: false, errors: { to: 'place' } });
+	});
+
+	it('flexible: needs a start place and always offers seats', () => {
+		expect(
+			parseTravel({ to: { mode: 'flexible', place: null }, from: { mode: 'undecided' } }, opts)
+		).toEqual({ ok: false, errors: { to: 'place' } });
+		const r = parseTravel(
+			{
+				to: {
+					mode: 'flexible',
+					place: { kind: 'saved', id: home.id },
+					carStatus: 'full',
+					carNote: 'Kombi'
+				},
+				from: { mode: 'undecided' }
+			},
+			opts
+		);
+		expect(r.ok && r.legs[0]).toMatchObject({
+			mode: 'flexible',
+			carStatus: 'offering',
+			carNote: 'Kombi'
+		});
 	});
 
 	it('rejects places of other users and incomplete pick-ups', () => {

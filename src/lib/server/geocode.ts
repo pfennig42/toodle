@@ -1,5 +1,14 @@
 import { GEOCODER_URL } from '$app/env/private';
-import { addressFromProperties, areaFromProperties, nameFromProperties } from './geocode-format.js';
+import {
+	addressFromProperties,
+	areaFromProperties,
+	hasShareableName,
+	nameFromProperties
+} from './geocode-format.js';
+import { distanceKm } from './ride-matching.js';
+
+/** A map click keeps a place's name only this close to it – otherwise it's just somewhere nearby. */
+const REVERSE_NAME_KM = 0.05;
 
 export type GeocodeResult = {
 	/** Short name, e.g. "Waldheim Bahnhof" or "Venloer Straße 12" */
@@ -8,6 +17,8 @@ export type GeocodeResult = {
 	area: string;
 	lat: number;
 	lon: number;
+	/** `name` may be shown to others (a station, a venue) – not an address (see hasShareableName) */
+	shareName: boolean;
 };
 
 type PhotonFeature = {
@@ -45,8 +56,10 @@ export async function reverseGeocode(
 	url.searchParams.set('limit', '1');
 	if (['de', 'en', 'fr'].includes(lang)) url.searchParams.set('lang', lang);
 	const [hit] = toResults(await fetchFeatures(url));
+	if (!hit) return null;
 	// keep the clicked spot – the nearest address may be some metres away
-	return hit ? { ...hit, lat: point.lat, lon: point.lon } : null;
+	const near = distanceKm(hit, point) <= REVERSE_NAME_KM;
+	return { ...hit, shareName: hit.shareName && near, lat: point.lat, lon: point.lon };
 }
 
 async function fetchFeatures(url: URL): Promise<PhotonFeature[]> {
@@ -66,6 +79,7 @@ function toResults(features: PhotonFeature[]): GeocodeResult[] {
 			name: nameFromProperties(f.properties),
 			address: addressFromProperties(f.properties),
 			area: areaFromProperties(f.properties),
+			shareName: hasShareableName(f.properties),
 			lon: f.geometry.coordinates[0],
 			lat: f.geometry.coordinates[1]
 		}))

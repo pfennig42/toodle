@@ -11,6 +11,7 @@ export function publicLeg(leg: RideLeg) {
 	return {
 		mode: leg.mode,
 		time: leg.time,
+		hasClock: leg.hasClock,
 		placeArea: leg.placeArea,
 		carStatus: leg.carStatus,
 		carNote: leg.carNote,

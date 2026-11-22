@@ -83,7 +83,7 @@ export function participantRows(
 						]
 							.filter(Boolean)
 							.join(' '),
-						time(leg.time),
+						leg.hasClock ? time(leg.time) : time(leg.time).slice(0, 10),
 						leg.carStatus
 							? carStatusLabel(leg.carStatus) + (leg.carNote ? ` – ${leg.carNote}` : '')
 							: '',

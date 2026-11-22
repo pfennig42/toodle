@@ -4,6 +4,7 @@
 	import {
 		FORM_MODES,
 		MAX_PICKUPS,
+		drivesMaybe,
 		type LegInput,
 		type GeoPoint,
 		type PlaceChoice,
@@ -11,6 +12,7 @@
 	} from '#lib/registration.js';
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatShortDate } from '#lib/date-range.js';
+	import { MODE_ICON as modeIcon, modeLabel } from '#lib/travel-summary.js';
 	import AddressSearch from './AddressSearch.svelte';
 	import Icon from './Icon.svelte';
 	import LegMap from './LegMap.svelte';
@@ -31,25 +33,25 @@
 		error?: string | null;
 	} = $props();
 
-	const modeLabel: Record<TravelMode, () => string> = {
-		car: m.mode_car,
-		transit: m.mode_transit,
-		seeking: m.mode_seeking,
-		undecided: m.mode_undecided
-	};
-	const modeIcon: Record<TravelMode, string> = {
-		car: '🚗',
-		transit: '🚆',
-		seeking: '🙋',
-		undecided: '🤷'
-	};
-
 	const isTo = $derived(direction === 'to');
 	// "transit" is only shown for older registrations that still use it
 	const modes = $derived(
 		leg.mode === 'transit' ? ([...FORM_MODES, 'transit'] as TravelMode[]) : [...FORM_MODES]
 	);
 	const looking = $derived(leg.mode === 'seeking' || leg.mode === 'transit');
+
+	/*
+	 * A small decision tree: first "coordinate a ride?" – only then how. "Egal" = undecided.
+	 * The local flag keeps the second question open until a mode is picked.
+	 */
+	let wantsRide = $state(false);
+	const coordinate = $derived(wantsRide || (!!leg.mode && leg.mode !== 'undecided'));
+
+	function setCoordinate(yes: boolean) {
+		wantsRide = yes;
+		if (!yes) setMode('undecided');
+		else if (leg.mode === 'undecided') leg.mode = null;
+	}
 
 	/** Someone driving with free seats needs a start: the saved place, or the search. */
 	function ensurePlace() {
@@ -62,6 +64,11 @@
 	function setMode(mode: TravelMode) {
 		leg.mode = mode;
 		if (mode === 'car' && leg.carStatus === 'offering') ensurePlace();
+		// flexible: could take people along, from their place
+		if (mode === 'flexible') {
+			leg.carStatus = 'offering';
+			ensurePlace();
+		}
 		// looking for a ride: start with the saved place (e.g. home) or an empty search
 		if (mode === 'seeking' && leg.pickups.length === 0) {
 			leg.pickups.push(
@@ -188,7 +195,7 @@
 			<input
 				id="day-{direction}"
 				type="date"
-				bind:value={() => day, (v) => setWhen(v, leg.mode === 'car' ? clock : '')}
+				bind:value={() => day, (v) => setWhen(v, drivesMaybe(leg.mode) ? clock : '')}
 			/>
 		</label>
 	{:else}
@@ -211,23 +218,112 @@
 	{/if}
 {/snippet}
 
+<!-- Where someone with a car starts, when, and a note – "car" with free seats and "flexible". -->
+{#snippet startDetails()}
+	{#if savedPlaces.length}
+		<label class="field">
+			<span>{isTo ? m.travel_place_to() : m.travel_place_from()}</span>
+			<select value={placeSelect} onchange={(e) => choosePlace(e.currentTarget.value)}>
+				<option value="">{m.travel_place_choose()}</option>
+				{#each savedPlaces as p (p.id)}
+					<option value={p.id}>{p.label} ({p.area})</option>
+				{/each}
+				<option value="__custom">{m.travel_place_other()}</option>
+			</select>
+		</label>
+	{:else}
+		<!-- nothing saved yet: no list to choose from, just search -->
+		<label class="field-label" for="place-{direction}"
+			>{isTo ? m.travel_place_to() : m.travel_place_from()}</label
+		>
+	{/if}
+
+	<!-- No name, no "save" checkbox: the first place is kept as "Zuhause" in the profile
+	     (renamed there if need be), other places only belong to this trip. -->
+	{#if leg.place?.kind === 'custom'}
+		<AddressSearch id="place-{direction}" bind:value={leg.place.point} hiddenInputs={false} />
+	{/if}
+	{@render mapBox(m.map_hint_start())}
+
+	{@render dayLine()}
+	{#if showClock}
+		<label class="field clock">
+			<span>{isTo ? m.travel_time_to() : m.travel_time_from()}</span>
+			<input
+				id="clock-{direction}"
+				type="time"
+				disabled={!day}
+				bind:value={() => clock, (v) => setWhen(day, v)}
+			/>
+		</label>
+	{/if}
+	{#if showNote}
+		<label class="field">
+			<span>{m.car_note()} <span class="muted">({m.optional()})</span></span>
+			<input
+				id="note-{direction}"
+				bind:value={leg.carNote}
+				maxlength="200"
+				placeholder={m.car_note_placeholder()}
+			/>
+		</label>
+	{/if}
+	{#if !showClock || !showNote}
+		<div class="extras">
+			{#if !showClock}
+				<button
+					type="button"
+					class="more"
+					onclick={() => reveal(() => (showClock = true), `clock-${direction}`)}
+					>{m.event_add_time()}</button
+				>
+			{/if}
+			{#if !showNote}
+				<button
+					type="button"
+					class="more"
+					onclick={() => reveal(() => (showNote = true), `note-${direction}`)}
+					>{m.travel_add_note()}</button
+				>
+			{/if}
+		</div>
+	{/if}
+{/snippet}
+
 <fieldset class="leg" aria-describedby={errorText ? `leg-error-${direction}` : undefined}>
 	<legend>{isTo ? m.travel_to() : m.travel_from()}</legend>
 
-	<div class="modes" role="radiogroup" aria-label={m.travel_how()}>
-		{#each modes as mode (mode)}
+	<div class="modes" role="radiogroup" aria-label={m.travel_coordinate_question()}>
+		{#each [true, false] as yes (yes)}
 			<button
 				type="button"
 				role="radio"
-				aria-checked={leg.mode === mode}
+				aria-checked={yes ? coordinate : leg.mode === 'undecided'}
 				class="mode"
-				onclick={() => setMode(mode)}
+				onclick={() => setCoordinate(yes)}
 			>
-				<span aria-hidden="true">{modeIcon[mode]}</span>
-				{modeLabel[mode]()}
+				<span aria-hidden="true">{yes ? '🤝' : '🤷'}</span>
+				{yes ? m.travel_coordinate() : m.travel_dont_care()}
 			</button>
 		{/each}
 	</div>
+
+	{#if coordinate}
+		<div class="modes" role="radiogroup" aria-label={m.travel_how()}>
+			{#each modes as mode (mode)}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={leg.mode === mode}
+					class="mode"
+					onclick={() => setMode(mode)}
+				>
+					<span aria-hidden="true">{modeIcon[mode]}</span>
+					{modeLabel(mode)}
+				</button>
+			{/each}
+		</div>
+	{/if}
 
 	{#if errorText}<p class="error small" id="leg-error-{direction}">{errorText}</p>{/if}
 
@@ -254,77 +350,15 @@
 			</div>
 
 			{#if leg.carStatus === 'offering'}
-				{#if savedPlaces.length}
-					<label class="field">
-						<span>{isTo ? m.travel_place_to() : m.travel_place_from()}</span>
-						<select value={placeSelect} onchange={(e) => choosePlace(e.currentTarget.value)}>
-							<option value="">{m.travel_place_choose()}</option>
-							{#each savedPlaces as p (p.id)}
-								<option value={p.id}>{p.label} ({p.area})</option>
-							{/each}
-							<option value="__custom">{m.travel_place_other()}</option>
-						</select>
-					</label>
-				{:else}
-					<!-- nothing saved yet: no list to choose from, just search -->
-					<label class="field-label" for="place-{direction}"
-						>{isTo ? m.travel_place_to() : m.travel_place_from()}</label
-					>
-				{/if}
-
-				<!-- No name, no "save" checkbox: the first place is kept as "Zuhause" in the profile
-				     (renamed there if need be), other places only belong to this trip. -->
-				{#if leg.place?.kind === 'custom'}
-					<AddressSearch id="place-{direction}" bind:value={leg.place.point} hiddenInputs={false} />
-				{/if}
-				{@render mapBox(m.map_hint_start())}
-
-				{@render dayLine()}
-				{#if showClock}
-					<label class="field clock">
-						<span>{isTo ? m.travel_time_to() : m.travel_time_from()}</span>
-						<input
-							id="clock-{direction}"
-							type="time"
-							disabled={!day}
-							bind:value={() => clock, (v) => setWhen(day, v)}
-						/>
-					</label>
-				{/if}
-				{#if showNote}
-					<label class="field">
-						<span>{m.car_note()} <span class="muted">({m.optional()})</span></span>
-						<input
-							id="note-{direction}"
-							bind:value={leg.carNote}
-							maxlength="200"
-							placeholder={m.car_note_placeholder()}
-						/>
-					</label>
-				{/if}
-				{#if !showClock || !showNote}
-					<div class="extras">
-						{#if !showClock}
-							<button
-								type="button"
-								class="more"
-								onclick={() => reveal(() => (showClock = true), `clock-${direction}`)}
-								>{m.event_add_time()}</button
-							>
-						{/if}
-						{#if !showNote}
-							<button
-								type="button"
-								class="more"
-								onclick={() => reveal(() => (showNote = true), `note-${direction}`)}
-								>{m.travel_add_note()}</button
-							>
-						{/if}
-					</div>
-				{/if}
+				{@render startDetails()}
 			{:else}
 				<p class="muted small">{m.car_status_hint()}</p>
 			{/if}
+		</div>
+	{:else if leg.mode === 'flexible'}
+		<div class="details">
+			<p class="muted small">{m.flexible_hint()}</p>
+			{@render startDetails()}
 		</div>
 	{:else if looking}
 		<div class="details">
@@ -470,7 +504,7 @@
 		font-size: 1.05rem;
 	}
 
-	/* three choices side by side, also on phones */
+	/* the choices side by side, also on phones */
 	.modes {
 		display: grid;
 		grid-auto-flow: column;

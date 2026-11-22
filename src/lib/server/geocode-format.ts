@@ -17,6 +17,15 @@ export function addressFromProperties(p: Record<string, string | undefined>): st
 	return [head, street, town, p.country].filter(Boolean).join(', ');
 }
 
+/**
+ * Whether the result's short name may be shown to other people: named places (stations,
+ * venues, towns) yes – plain addresses ("Venloer Straße 12") and streets no, that would
+ * give away where somebody lives.
+ */
+export function hasShareableName(p: Record<string, string | undefined>): boolean {
+	return !!p.name && p.type !== 'street';
+}
+
 /** Short label: the POI name, otherwise street + number, otherwise the town. */
 export function nameFromProperties(p: Record<string, string | undefined>): string {
 	if (p.name) return p.name;

@@ -15,6 +15,7 @@
 		direction: 'to' | 'from';
 		mode: TravelMode;
 		time: Date | null;
+		hasClock: boolean;
 		placeLabel: string | null;
 		placeArea: string | null;
 		carStatus: CarStatus | null;
@@ -65,7 +66,7 @@
 					· {leg.direction === 'to' ? m.summary_from() : m.summary_to()}
 					{placeText(leg)}
 				{/if}
-				{#if leg.time}· {shortTime(leg.time, timezone, locale)}{/if}
+				{#if leg.time}· {shortTime(leg.time, timezone, locale, leg.hasClock)}{/if}
 				{#if leg.carStatus}<br /><span class="muted"
 						>{carStatusLabel(leg.carStatus)}{leg.carNote ? ` – ${leg.carNote}` : ''}</span
 					>{/if}

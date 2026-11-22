@@ -3,19 +3,20 @@ import QRCode from 'qrcode';
 import type { TravelDirection } from '#lib/forms.js';
 import {
 	getEventForOrganizer,
+	requireOrganizerEvent,
 	listFields,
 	publishBlockers,
 	setEventStatus
 } from '#lib/server/events.js';
 import { countActiveRegistrations } from '#lib/server/registrations.js';
-import { isSeeker } from '#lib/server/ride-matching.js';
+import { seeksNow } from '#lib/server/ride-matching.js';
 import { loadRideData } from '#lib/server/rides.js';
 import type { Actions, PageServerLoad } from './$types';
 
 /** The event at a glance: success after publishing, sharing, a few numbers. Settings live elsewhere. */
 export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
 	const { event: summary } = await parent();
-	const e = getEventForOrganizer(params.id, locals.user!.id)!;
+	const e = requireOrganizerEvent(params.id, locals.user!.id);
 	const qr = await QRCode.toString(summary.publicUrl, {
 		type: 'svg',
 		margin: 1,
@@ -27,11 +28,11 @@ export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
 		listFields(e.id).find((f) => f.type === 'travel')?.config.directions ?? [];
 	const { participants, links } = loadRideData(e.id);
 	const seekingOpen = directions.reduce((n, d) => {
-		const taken = new Set(
-			links.filter((l) => l.direction === d).map((l) => l.passengerRegistrationId)
-		);
+		const dirLinks = links.filter((l) => l.direction === d);
+		const taken = new Set(dirLinks.map((l) => l.passengerRegistrationId));
 		return (
-			n + participants.filter((p) => isSeeker(p.legs[d]) && !taken.has(p.registrationId)).length
+			n +
+			participants.filter((p) => seeksNow(p, d, dirLinks) && !taken.has(p.registrationId)).length
 		);
 	}, 0);
 
@@ -51,9 +52,10 @@ export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
 			registrations: countActiveRegistrations(e.id),
 			hasTravel: directions.length > 0,
 			seekingOpen,
-			blockers: publishBlockers(e)
+			blockers: publishBlockers(e, locals.user!)
 		},
 		qr,
+		email: locals.user!.email,
 		published: url.searchParams.has('published')
 	};
 };
@@ -63,7 +65,7 @@ export const actions: Actions = {
 	publish: ({ params, locals }) => {
 		const e = getEventForOrganizer(params.id, locals.user!.id);
 		if (!e) redirect(303, '/');
-		if (publishBlockers(e).length) return fail(400, { error: 'blocked' as const });
+		if (publishBlockers(e, locals.user!).length) return fail(400, { error: 'blocked' as const });
 		setEventStatus(e.id, 'published');
 		redirect(303, `/events/${e.id}?published=1`);
 	}

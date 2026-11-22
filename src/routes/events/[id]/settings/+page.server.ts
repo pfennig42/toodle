@@ -4,21 +4,24 @@ import {
 	deleteEvent,
 	duplicateEvent,
 	getEventForOrganizer,
+	requireOrganizerEvent,
 	publishBlockers,
 	setEventStatus,
 	setRegistrationClosed
 } from '#lib/server/events.js';
+import { cancellationMails, sendAll } from '#lib/server/notifications.js';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Settings › General: registration open/closed, visibility, duplicate, archive, delete. */
 export const load: PageServerLoad = ({ params, locals }) => {
-	const e = getEventForOrganizer(params.id, locals.user!.id)!;
+	const e = requireOrganizerEvent(params.id, locals.user!.id);
 	return {
 		settings: {
 			status: e.status,
 			registrationClosed: e.registrationClosed,
-			blockers: publishBlockers(e)
-		}
+			blockers: publishBlockers(e, locals.user!)
+		},
+		email: locals.user!.email
 	};
 };
 
@@ -31,7 +34,7 @@ function requireEvent(id: string, userId: string) {
 export const actions: Actions = {
 	publish: ({ params, locals }) => {
 		const e = requireEvent(params.id, locals.user!.id);
-		if (publishBlockers(e).length) return fail(400, { error: 'blocked' as const });
+		if (publishBlockers(e, locals.user!).length) return fail(400, { error: 'blocked' as const });
 		setEventStatus(e.id, 'published');
 	},
 	unpublish: ({ params, locals }) => {
@@ -61,7 +64,10 @@ export const actions: Actions = {
 		const e = requireEvent(params.id, locals.user!.id);
 		const confirm = String((await request.formData()).get('confirm') ?? '').trim();
 		if (confirm !== e.title) return fail(400, { error: 'confirm' as const });
+		// built before deleting: afterwards nothing is left to tell people about
+		const mails = cancellationMails(e.id);
 		deleteEvent(e.id);
+		void sendAll(mails);
 		redirect(303, '/');
 	}
 };

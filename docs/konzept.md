@@ -74,11 +74,15 @@ stehen sie ganz am Ende des Formulars.
 
 ### 4.4 Feldtyp „Reise“
 
-> **Stand (nach Nutzertests):** Im Formular gibt es nur noch 🚗 Auto · 🙋 Suche Mitfahrt · Keine Angabe.
+> **Stand (nach Nutzertests):** Im Formular zuerst: 🤝 Gemeinsam fahren · 🤷 Egal (= Keine Angabe). Nur bei
+> „Gemeinsam fahren“ folgt: 🙋 Suche Mitfahrt · 🚗 Auto · 🔄 Flexibel.
 > „ÖV“ ist in „Suche Mitfahrt“ aufgegangen: Wer mitfahren will, nennt einen oder mehrere Abholorte (zu Hause, Bahnhof …,
 > Uhrzeit optional). Beim Auto kommt zuerst „Nimmst du Leute mit?“ – Ort und Zeit nur, wenn ja. Der Tag ist aus der
 > Veranstaltung vorbelegt, die Uhrzeit optional. Die Abreise übernimmt die Anreise, bis man sie ändert. Ältere
 > ÖV-Angaben werden weiter angezeigt und abgeglichen.
+> „Flexibel“: kann selbst fahren oder mitfahren, je nach Bedarf. Angegeben wird nur der Startort (+ Zeit/Notiz
+> optional); man erscheint bei den Fahrer:innen _und_ bei den Suchenden. Sobald man jemanden mitnimmt, ist man nur
+> noch Fahrer:in – sobald man mitfährt, nur noch Mitfahrer:in (keine Ketten).
 > Offen ist nur, was alle beantworten (Wie? · Platz frei? · Von wo?). Tag als Text („Fr., 27. Nov. · ändern“),
 > Uhrzeit, Notiz und weitere Abholorte hinter „+ …“; der erste Ort wird still als „Zuhause“ gespeichert (keine
 > Bezeichnung, kein Häkchen). Solange die Abreise der Anreise folgt, ist sie nur eine Zeile („↩ Rückfahrt genauso ·
@@ -243,7 +247,7 @@ registration    id, event_id, user_id, status (active|withdrawn), comment, creat
 answer          registration_id, field_id, value(json)
 travel_leg      id, registration_id, direction (to|from),
                 time, time_flexible ("nach Ende"), place_lat, place_lon, place_label,
-                mode (car|transit|seeking|undecided),
+                mode (car|flexible|transit|seeking|undecided),
                 car_status (offering|full|not_offering), car_note,
 pickup_option   id, leg_id, position, label, area, lat, lon, time   -- Alternativen für die letzte Meile
 ride_link       id, event_id, direction, driver_leg_id, passenger_leg_id, set_by_user_id, created_at

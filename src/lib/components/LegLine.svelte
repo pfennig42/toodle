@@ -13,6 +13,7 @@
 		leg: {
 			mode: TravelMode;
 			time: Date | null;
+			hasClock: boolean;
 			placeArea: string | null;
 			pickups: { label: string; time: Date | null }[];
 		};
@@ -36,7 +37,7 @@
 		{modeLabel(leg.mode)}{#if leg.placeArea}
 			&nbsp;· {direction === 'to' ? m.summary_from() : m.summary_to()}
 			{leg.placeArea}{/if}{#if leg.time}
-			&nbsp;· {shortTime(leg.time, timezone, locale)}{/if}
+			&nbsp;· {shortTime(leg.time, timezone, locale, leg.hasClock)}{/if}
 	{/if}
 </span>
 

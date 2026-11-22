@@ -17,7 +17,14 @@
 			month: 'long'
 		}).format(new Date(`${day}T12:00:00Z`));
 
-	const MODES: (TravelMode | 'none')[] = ['car', 'transit', 'seeking', 'undecided', 'none'];
+	const MODES: (TravelMode | 'none')[] = [
+		'car',
+		'flexible',
+		'transit',
+		'seeking',
+		'undecided',
+		'none'
+	];
 	const modeText = (mode: TravelMode | 'none') =>
 		mode === 'none' ? m.planning_mode_none() : `${MODE_ICON[mode]} ${modeLabel(mode)}`;
 	const timeText = (t: Date | null) => (t ? onlyTime(t, data.timezone, locale) : '–');

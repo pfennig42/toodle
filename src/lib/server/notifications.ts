@@ -165,6 +165,130 @@ function orgaReply(e: Event, footer: string, rides = false) {
 
 const path = (url: string) => url.slice(ORIGIN.length) || '/';
 
+/** Calendar entry – the same UID every time, so calendars update an entry made earlier. */
+function icsAttachment(e: Event) {
+	return {
+		filename: 'event.ics',
+		contentType: 'text/calendar; charset=utf-8; method=PUBLISH',
+		content: eventIcs({
+			id: e.id,
+			title: e.title,
+			startsAt: e.startsAt,
+			endsAt: e.endsAt,
+			location: [e.locationName, e.locationAddress].filter(Boolean).join(', '),
+			url: eventUrl(e),
+			description: '',
+			allDay: !e.startHasTime && !e.endHasTime,
+			timezone: e.timezone
+		})
+	};
+}
+
+/** Everybody actively registered for an event. */
+function registeredUsers(eventId: string): Recipient[] {
+	return db
+		.select({ user })
+		.from(registration)
+		.innerJoin(user, eq(user.id, registration.userId))
+		.where(and(eq(registration.eventId, eventId), eq(registration.status, 'active')))
+		.all()
+		.map((r) => r.user);
+}
+
+/** Only upcoming, published events concern anybody. */
+const concernsParticipants = (e: Event, now = new Date()) =>
+	e.status === 'published' && e.endsAt > now;
+
+const whereText = (e: Event) => [e.locationName, e.locationArea].filter(Boolean).join(', ');
+
+/* ---------------------------------------------------- changes & cancellation */
+
+/**
+ * The organizers changed date or place of a published event: everybody registered hears about
+ * it (whatever their mail settings – it's about the event itself), with the updated calendar
+ * entry. `travelMoved`: travel plans were moved to the new days. Never throws.
+ */
+export async function notifyEventChanged(
+	eventId: string,
+	change: { when: boolean; where: boolean; travelMoved: boolean }
+) {
+	try {
+		const e = db.select().from(event).where(eq(event.id, eventId)).get();
+		if (!e || !concernsParticipants(e) || (!change.when && !change.where)) return;
+		for (const u of registeredUsers(e.id)) {
+			const mail = withLocale(u.locale, () => {
+				const locale = u.locale ?? 'de';
+				const reply = orgaReply(e, m.mail_changed_footer());
+				return {
+					to: u.email,
+					replyTo: reply.replyTo,
+					subject: m.mail_changed_subject({ title: e.title }),
+					...renderMail({
+						paragraphs: [
+							m.mail_hello({ name: displayName(u) }),
+							m.mail_changed_intro({ title: e.title })
+						],
+						items: [
+							...(change.when
+								? [
+										m.mail_changed_when({
+											when: formatRange(e.startsAt, e.endsAt, e.timezone, locale, e)
+										})
+									]
+								: []),
+							...(change.where && whereText(e)
+								? [m.mail_changed_where({ where: whereText(e) })]
+								: [])
+						],
+						after: change.travelMoved ? [m.mail_changed_travel()] : [],
+						action: { label: m.mail_button_event(), url: eventUrl(e) },
+						footer: reply.footer
+					}),
+					attachments: [icsAttachment(e)]
+				} satisfies Mail;
+			});
+			await trySendMail(mail);
+		}
+	} catch (err) {
+		console.error('[notify] event change failed', err);
+	}
+}
+
+/**
+ * Cancellation mails for everybody registered – built BEFORE the event is deleted (afterwards
+ * nothing is left to build them from), sent after with `sendAll`.
+ */
+export function cancellationMails(eventId: string): Mail[] {
+	const e = db.select().from(event).where(eq(event.id, eventId)).get();
+	if (!e || !concernsParticipants(e)) return [];
+	return registeredUsers(e.id).map((u) =>
+		withLocale(u.locale, () => {
+			const locale = u.locale ?? 'de';
+			const reply = orgaReply(e, m.mail_cancelled_footer());
+			return {
+				to: u.email,
+				replyTo: reply.replyTo,
+				subject: m.mail_cancelled_subject({ title: e.title }),
+				...renderMail({
+					paragraphs: [
+						m.mail_hello({ name: displayName(u) }),
+						m.mail_cancelled_text({
+							title: e.title,
+							when: formatRange(e.startsAt, e.endsAt, e.timezone, locale, e)
+						})
+					],
+					footer: reply.footer
+				})
+			};
+		})
+	);
+}
+
+/** Sends prepared mails one after another. Never throws. */
+export async function sendAll(mails: Mail[]) {
+	for (const mail of mails) await trySendMail(mail);
+}
+
 /* ------------------------------------------------------------ confirmation */
 
 /** After a new registration (or re-registration). Never throws. */
@@ -205,7 +329,7 @@ export async function sendConfirmation(
 					[
 						`${dirLabel(l.direction)}: ${modeLabel(l.mode)}`,
 						l.placeArea ?? l.placeLabel,
-						l.time ? shortTime(l.time, e.timezone, locale) : null
+						l.time ? shortTime(l.time, e.timezone, locale, l.hasClock) : null
 					]
 						.filter(Boolean)
 						.join(' · ')
@@ -245,23 +369,7 @@ export async function sendConfirmation(
 					}
 				}),
 				unsubscribeUrl: unsubscribeUrl(u, 'confirmation'),
-				attachments: [
-					{
-						filename: 'event.ics',
-						contentType: 'text/calendar; charset=utf-8; method=PUBLISH',
-						content: eventIcs({
-							id: e.id,
-							title: e.title,
-							startsAt: e.startsAt,
-							endsAt: e.endsAt,
-							location: [e.locationName, e.locationAddress].filter(Boolean).join(', '),
-							url: eventUrl(e),
-							description: '',
-							allDay: !e.startHasTime && !e.endHasTime,
-							timezone: e.timezone
-						})
-					}
-				]
+				attachments: [icsAttachment(e)]
 			};
 		});
 		await trySendMail(mail);
@@ -452,7 +560,12 @@ async function travelReminders(e: Event, now: Date) {
 			)
 		)
 		.all();
-	const drivers = legs.filter((l) => l.mode === 'car').length;
+	// people (not legs) who take others along in at least one direction
+	const drivers = new Set(
+		legs
+			.filter((l) => (l.mode === 'car' || l.mode === 'flexible') && l.carStatus === 'offering')
+			.map((l) => l.registrationId)
+	).size;
 
 	let sent = 0;
 	for (const { reg, user: u } of regs) {

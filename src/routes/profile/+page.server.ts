@@ -4,8 +4,10 @@ import { db } from '#lib/server/db/index.js';
 import { user } from '#lib/server/db/schema.js';
 import { destroyOtherSessions, destroySession } from '#lib/server/auth/index.js';
 import { hashPassword } from '#lib/server/auth/crypto.js';
+import { sendLoginLink } from '#lib/server/auth/login-link.js';
+import { createRateLimiter } from '#lib/server/auth/rate-limit.js';
 import { isValidPassword, normalizeEmail, safeNext } from '#lib/server/auth/validation.js';
-import { getEventBySlug } from '#lib/server/events.js';
+import { deleteEvent, getEventBySlug, soleOrganizedEvents } from '#lib/server/events.js';
 import {
 	addContact,
 	addPlace,
@@ -19,9 +21,16 @@ import {
 	parsePlace,
 	updatePlace
 } from '#lib/server/profile.js';
-import { PREF_KINDS, setPreference } from '#lib/server/notifications.js';
+import {
+	cancellationMails,
+	PREF_KINDS,
+	sendAll,
+	setPreference
+} from '#lib/server/notifications.js';
 import { listDevices, removeSubscription } from '#lib/server/push.js';
 import type { Actions, PageServerLoad } from './$types';
+
+const verifyPerUser = createRateLimiter(3, 15 * 60 * 1000);
 
 /** Came here from an event's registration: offer the way back (the event isn't lost). */
 function backTo(next: string | null) {
@@ -46,9 +55,20 @@ export const load: PageServerLoad = ({ locals, url }) => {
 		back: backTo(safeNext(url.searchParams.get('next'))),
 		prefs,
 		devices: listDevices(me.id).map(({ id, label }) => ({ id, label })),
-		profile: { name: me.name ?? '', email: me.email, hasPassword: me.hasPassword },
+		profile: {
+			name: me.name ?? '',
+			email: me.email,
+			hasPassword: me.hasPassword,
+			emailVerified: me.emailVerified
+		},
 		contacts: listContacts(me.id).map(({ id, kind, value, label }) => ({ id, kind, value, label })),
 		maxContacts: MAX_CONTACTS,
+		/** deleting the account deletes these too (nobody else could manage them) */
+		soleEvents: soleOrganizedEvents(me.id).map(({ id, title, status, endsAt }) => ({
+			id,
+			title,
+			upcoming: status === 'published' && endsAt > new Date()
+		})),
 		places: listPlaces(me.id).map(({ id, label, address, area, lat, lon }) => ({
 			id,
 			label,
@@ -126,11 +146,37 @@ export const actions: Actions = {
 		return { section: 'password', saved: true };
 	},
 
+	/**
+	 * "Confirm your address": a magic link to the own address (e.g. before publishing an event).
+	 * Used from other pages too – `next` leads back there.
+	 */
+	verifyEmail: async ({ request, locals, url }) => {
+		const me = locals.user!;
+		const next = safeNext((await request.formData()).get('next')) ?? '/profile';
+		if (me.emailVerified) return { section: 'verify', verified: true };
+		if (!verifyPerUser.take(me.id)) return fail(429, { section: 'verify', error: 'rate' });
+		try {
+			await sendLoginLink(me.email, next, url.origin);
+		} catch (err) {
+			console.error('[profile] could not send verification mail', err);
+			return fail(500, { section: 'verify', error: 'mail' });
+		}
+		return { section: 'verify', sent: true };
+	},
+
 	deleteAccount: async ({ request, locals, cookies }) => {
 		const confirm = normalizeEmail((await request.formData()).get('confirm'));
 		if (confirm !== locals.user!.email) return fail(400, { section: 'delete', error: 'confirm' });
+		// Events only this person organizes would be left behind without anybody to manage them:
+		// they go too – and whoever registered for one hears that it's cancelled.
+		const sole = soleOrganizedEvents(locals.user!.id);
+		const mails = sole.flatMap((e) => cancellationMails(e.id));
 		destroySession(cookies);
-		db.delete(user).where(eq(user.id, locals.user!.id)).run();
+		db.transaction(() => {
+			for (const e of sole) deleteEvent(e.id);
+			db.delete(user).where(eq(user.id, locals.user!.id)).run();
+		});
+		void sendAll(mails);
 		redirect(303, '/?deleted=1');
 	}
 };

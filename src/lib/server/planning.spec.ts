@@ -22,6 +22,7 @@ const ev = {
 const leg = (over: Partial<PlanningPerson['legs']['to']> = {}) => ({
 	mode: 'car' as const,
 	time: null,
+	hasClock: true,
 	lat: null,
 	lon: null,
 	pickups: [],
@@ -92,6 +93,24 @@ describe('stayOf', () => {
 		expect(s.arrive).toEqual(at('2027-07-16T16:40'));
 		expect(s.leave).toEqual(at('2027-07-17T15:00'));
 		expect(s.leaveAssumed).toBe(false);
+	});
+
+	it('counts the day but not the time of day when only the day is given', () => {
+		const s = stayOf(
+			person('a', {
+				to: leg({ time: at('2027-07-17T12:00'), hasClock: false, lat: 51.0, lon: 8.1 }),
+				from: leg({ time: at('2027-07-18T12:00'), hasClock: false })
+			}),
+			ev
+		);
+		expect(s.arrive).toEqual(at('2027-07-17T12:00'));
+		expect(s).toMatchObject({ arriveClock: false, leaveClock: false, arriveAssumed: false });
+		const [, sat] = dayPlans(
+			[person('a', { to: leg({ time: at('2027-07-17T12:00'), hasClock: false }) })],
+			[],
+			ev
+		);
+		expect(sat.arriving).toEqual([{ name: 'a', time: null }]);
 	});
 });
 
@@ -187,6 +206,6 @@ describe('modeCounts', () => {
 			[person('a', { to: leg() }), person('b', { to: leg({ mode: 'transit' }) }), person('c')],
 			'to'
 		);
-		expect(c).toEqual({ car: 1, transit: 1, seeking: 0, undecided: 1, none: 0 });
+		expect(c).toEqual({ car: 1, flexible: 0, transit: 1, seeking: 0, undecided: 1, none: 0 });
 	});
 });

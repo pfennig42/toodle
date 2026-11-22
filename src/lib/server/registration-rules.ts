@@ -5,6 +5,7 @@ import {
 	CAR_STATUSES,
 	MAX_PICKUPS,
 	TRAVEL_MODES,
+	drivesMaybe,
 	type AnswerValue,
 	type CarStatus,
 	type GeoPoint,
@@ -121,7 +122,7 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 
 function parsePoint(v: unknown): GeoPoint | null {
 	if (!isObj(v)) return null;
-	const { name, address, area, lat, lon } = v;
+	const { name, address, area, lat, lon, shareName } = v;
 	if (
 		typeof address !== 'string' ||
 		!address.trim() ||
@@ -138,7 +139,22 @@ function parsePoint(v: unknown): GeoPoint | null {
 	)
 		return null;
 	const short = typeof name === 'string' && name.trim() ? name.trim().slice(0, 120) : area;
-	return { name: short, address: address.trim(), area: area.trim(), lat, lon };
+	return {
+		name: short,
+		address: address.trim(),
+		area: area.trim(),
+		lat,
+		lon,
+		shareName: shareName === true
+	};
+}
+
+/**
+ * What others may see of a searched point: the name of a station or venue, but never a street
+ * address – then only the town / district.
+ */
+function publicName(point: GeoPoint): string {
+	return point.shareName ? point.name : point.area;
 }
 
 /**
@@ -207,7 +223,7 @@ export function parseTravel(
 			const label = typeof choice.label === 'string' ? choice.label.trim().slice(0, 40) : '';
 			if (point) {
 				place = {
-					label: label || point.name,
+					label: label || publicName(point),
 					address: point.address,
 					area: point.area,
 					lat: point.lat,
@@ -222,20 +238,24 @@ export function parseTravel(
 			// nothing picked from the search = no place (fine for public transport, see below)
 		}
 		// Car status (first: if nobody can come along, where from doesn't matter for rides)
+		// "flexible" always means: could take people along.
 		const carStatus =
-			mode === 'car'
-				? CAR_STATUSES.includes(leg.carStatus as CarStatus)
-					? (leg.carStatus as CarStatus)
-					: 'offering'
-				: null;
+			mode === 'flexible'
+				? 'offering'
+				: mode === 'car'
+					? CAR_STATUSES.includes(leg.carStatus as CarStatus)
+						? (leg.carStatus as CarStatus)
+						: 'offering'
+					: null;
 		// Drivers who take people along must say where they start – matching is based on it.
-		if (!place && mode === 'car' && carStatus === 'offering') {
+		// Flexible people too: it's where they drive from or get picked up.
+		if (!place && drivesMaybe(mode) && carStatus === 'offering') {
 			errors[direction] = 'place';
 			continue;
 		}
 
 		const carNote =
-			mode === 'car' && typeof leg.carNote === 'string'
+			drivesMaybe(mode) && typeof leg.carNote === 'string'
 				? leg.carNote.trim().slice(0, CAR_NOTE_MAX)
 				: '';
 
@@ -273,7 +293,7 @@ export function parseTravel(
 					break;
 				}
 				pickups.push({
-					label: point.name,
+					label: saved ? point.name : publicName(point),
 					area: point.area,
 					lat: point.lat,
 					lon: point.lon,

@@ -1,7 +1,7 @@
 /** Shared types for registrations (client form ↔ server). See docs/konzept.md 4.4. */
 import type { TravelDirection } from './forms.js';
 
-export const TRAVEL_MODES = ['car', 'transit', 'seeking', 'undecided'] as const;
+export const TRAVEL_MODES = ['car', 'flexible', 'transit', 'seeking', 'undecided'] as const;
 export type TravelMode = (typeof TRAVEL_MODES)[number];
 
 export const CAR_STATUSES = ['offering', 'full', 'not_offering'] as const;
@@ -13,7 +13,15 @@ export const MAX_PICKUPS = 5;
 export const COMMENT_MAX = 2000;
 export const CAR_NOTE_MAX = 200;
 
-export type GeoPoint = { name: string; address: string; area: string; lat: number; lon: number };
+export type GeoPoint = {
+	name: string;
+	address: string;
+	area: string;
+	lat: number;
+	lon: number;
+	/** `name` may be shown to others (station, venue) – false for plain addresses */
+	shareName?: boolean;
+};
 
 /** Where a leg starts (arrival) or ends (departure) – as sent by the registration form. */
 export type PlaceChoice =
@@ -26,8 +34,15 @@ export type PlaceChoice =
  */
 export type PickupInput = { point: GeoPoint | null; savedId?: string; time: string };
 
-/** Modes offered in the form. "transit" is only kept for older registrations. */
-export const FORM_MODES = ['car', 'seeking', 'undecided'] as const;
+/**
+ * Modes offered in the form, once someone wants to coordinate a ride (otherwise: "undecided").
+ * "transit" is only kept for older registrations.
+ */
+export const FORM_MODES = ['seeking', 'car', 'flexible'] as const;
+
+/** Modes that come with a car and a start place: "car" and "flexible" (drives or rides along). */
+export const drivesMaybe = (mode: TravelMode | null | undefined) =>
+	mode === 'car' || mode === 'flexible';
 
 export type LegInput = {
 	mode: TravelMode | null;

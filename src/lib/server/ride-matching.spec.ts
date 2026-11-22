@@ -32,6 +32,7 @@ const leg = (over: Partial<RideLeg>): RideLeg => ({
 	lon: null,
 	carStatus: null,
 	carNote: '',
+	hasClock: true,
 	pickups: [],
 	...over
 });
@@ -87,6 +88,19 @@ describe('bestMatch', () => {
 		);
 		expect(m?.timeGapMin).toBeGreaterThan(0);
 		expect(m?.timeGapMin).toBeLessThan(30);
+	});
+
+	it('does not compare times when only the day is known', () => {
+		// "Friday" is stored as noon – that must not count as "4 hours after the train"
+		const dayOnly = driverFrom(KOELN, { time: t('2027-07-16T10:00:00Z'), hasClock: false });
+		const m = bestMatch(dayOnly, searchPoints(transit), EVENT, 'to');
+		expect(m?.timeGapMin).toBeNull();
+
+		const seeker = leg({ mode: 'seeking', ...BONN, time: t('2027-07-16T10:00:00Z') });
+		const withClock = driverFrom(KOELN, { time: t('2027-07-16T06:00:00Z') });
+		expect(bestMatch(withClock, searchPoints(seeker), EVENT, 'to')?.timeGapMin).not.toBeNull();
+		const seekerDayOnly = { ...seeker, hasClock: false };
+		expect(bestMatch(withClock, searchPoints(seekerDayOnly), EVENT, 'to')?.timeGapMin).toBeNull();
 	});
 });
 
@@ -154,16 +168,20 @@ describe('permissions', () => {
 	const lea = person('lea', leg({ mode: 'seeking', ...KOELN }));
 
 	it('passengers may join cars that take people', () => {
-		expect(canLink({ registrationId: 'lea', isOrganizer: false }, anna, lea, 'to')).toBe(true);
-		expect(canLink({ registrationId: 'lea', isOrganizer: false }, ben, lea, 'to')).toBe(false);
+		expect(canLink({ registrationId: 'lea', isOrganizer: false }, anna, lea, 'to', [])).toBe(true);
+		expect(canLink({ registrationId: 'lea', isOrganizer: false }, ben, lea, 'to', [])).toBe(false);
 	});
 
 	it('drivers and organizers may always link, others never', () => {
-		expect(canLink({ registrationId: 'ben', isOrganizer: false }, ben, lea, 'to')).toBe(true);
-		expect(canLink({ registrationId: null, isOrganizer: true }, ben, lea, 'to')).toBe(true);
-		expect(canLink({ registrationId: 'anna', isOrganizer: false }, ben, lea, 'to')).toBe(false);
-		expect(canLink({ registrationId: 'anna', isOrganizer: false }, anna, ben, 'to')).toBe(false); // ben drives himself
-		expect(canLink({ registrationId: 'lea', isOrganizer: false }, anna, lea, 'from')).toBe(false); // no legs
+		expect(canLink({ registrationId: 'ben', isOrganizer: false }, ben, lea, 'to', [])).toBe(true);
+		expect(canLink({ registrationId: null, isOrganizer: true }, ben, lea, 'to', [])).toBe(true);
+		expect(canLink({ registrationId: 'anna', isOrganizer: false }, ben, lea, 'to', [])).toBe(false);
+		expect(canLink({ registrationId: 'anna', isOrganizer: false }, anna, ben, 'to', [])).toBe(
+			false
+		); // ben drives himself
+		expect(canLink({ registrationId: 'lea', isOrganizer: false }, anna, lea, 'from', [])).toBe(
+			false
+		); // no legs
 	});
 
 	it('unlinking: both parties and organizers', () => {
@@ -312,5 +330,65 @@ describe('linkVisible', () => {
 			linkVisible({ registrationId: null, isOrganizer: true }, 'internal', null, 'koeln', 'me')
 		).toBe(true);
 		expect(linkVisible(me, 'public', null, 'far', 'me')).toBe(true);
+	});
+});
+
+describe('flexible (drives or rides along)', () => {
+	const flex = (p: { lat: number; lon: number }) =>
+		leg({ mode: 'flexible', carStatus: 'offering', placeArea: 'X', ...p });
+	const anna = person('anna', driverFrom(KOELN));
+	const fritz = person('fritz', flex(KOELN));
+	const lea = person('lea', leg({ mode: 'seeking', ...KOELN }));
+	const link = (id: string, driver: string, passenger: string) => ({
+		id,
+		direction: 'to' as const,
+		driverRegistrationId: driver,
+		passengerRegistrationId: passenger
+	});
+
+	it('shows up as driver and as seeker, and sees both lists', () => {
+		const people = [anna, fritz, lea];
+		const forLea = buildDirectionView(people, [], 'lea', 'to', EVENT);
+		expect(forLea.drivers.map((d) => d.registrationId)).toEqual(['anna', 'fritz']);
+		const forAnna = buildDirectionView(people, [], 'anna', 'to', EVENT);
+		expect(forAnna.seekers.map((s) => s.registrationId).sort()).toEqual(['fritz', 'lea']);
+
+		const own = buildDirectionView(people, [], 'fritz', 'to', EVENT);
+		expect(own.role).toBe('flexible');
+		expect(own.drivers.map((d) => d.registrationId)).toEqual(['anna']);
+		expect(own.seekers.map((s) => s.registrationId)).toEqual(['lea']);
+		expect(own.seekers[0].match).not.toBeNull();
+		expect(own.drivers[0].match).not.toBeNull();
+
+		const matched = restrictView(own, 'matched');
+		expect(matched.drivers).toHaveLength(1);
+		expect(matched.seekers).toHaveLength(1);
+	});
+
+	it('is only a passenger once riding along, only a driver once taking someone', () => {
+		const people = [anna, fritz, lea];
+		const riding = [link('l1', 'anna', 'fritz')];
+		expect(buildDirectionView(people, riding, 'fritz', 'to', EVENT).role).toBe('seeker');
+		expect(
+			buildDirectionView(people, riding, 'lea', 'to', EVENT).drivers.map((d) => d.registrationId)
+		).toEqual(['anna']);
+
+		const taking = [link('l1', 'fritz', 'lea')];
+		expect(buildDirectionView(people, taking, 'fritz', 'to', EVENT).role).toBe('driver');
+		expect(
+			buildDirectionView(people, taking, 'anna', 'to', EVENT).seekers.map((s) => s.registrationId)
+		).toEqual(['lea']);
+	});
+
+	it('can be linked either way, but never into a chain', () => {
+		const orga = { registrationId: null, isOrganizer: true };
+		expect(canLink(orga, fritz, lea, 'to', [])).toBe(true);
+		expect(canLink(orga, anna, fritz, 'to', [])).toBe(true);
+		expect(canLink(orga, fritz, anna, 'to', [])).toBe(false); // anna drives herself
+		expect(canLink(orga, fritz, lea, 'to', [link('l1', 'anna', 'fritz')])).toBe(false);
+		expect(canLink(orga, anna, fritz, 'to', [link('l1', 'fritz', 'lea')])).toBe(false);
+		// a chain from a race: riding along wins
+		const chain = [link('a', 'anna', 'fritz'), link('b', 'fritz', 'lea')];
+		expect(staleLinks([anna, fritz, lea], chain).map((l) => l.id)).toEqual(['b']);
 	});
 });

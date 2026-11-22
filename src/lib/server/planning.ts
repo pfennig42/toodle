@@ -10,6 +10,8 @@ import { straightLine, type Point, type TravelTime } from './ride-matching.js';
 export type PlanningLeg = {
 	mode: TravelMode;
 	time: Date | null;
+	/** false: only the day was given (`time` is noon of that day) */
+	hasClock: boolean;
 	lat: number | null;
 	lon: number | null;
 	pickups: { time: Date | null }[];
@@ -35,6 +37,9 @@ export type Stay = {
 	/** true when the time was taken from the event because the person gave none */
 	arriveAssumed: boolean;
 	leaveAssumed: boolean;
+	/** false when only the day is known – the day counts, the time of day is a guess */
+	arriveClock: boolean;
+	leaveClock: boolean;
 };
 
 /**
@@ -48,6 +53,7 @@ export function stayOf(
 	travel: TravelTime = straightLine
 ): Stay {
 	let arrive: Date | null = null;
+	let arriveClock = true;
 	const to = person.legs.to;
 	if (to) {
 		const pickupTimes = to.pickups
@@ -55,6 +61,10 @@ export function stayOf(
 			.filter((t): t is number => t !== undefined);
 		if (pickupTimes.length) {
 			arrive = new Date(Math.min(...pickupTimes));
+		} else if (to.time && !to.hasClock) {
+			// only the day: there that day (noon) – no drive time to add to an unknown start
+			arrive = to.time;
+			arriveClock = false;
 		} else if (to.time) {
 			const minutes =
 				ev.point && to.lat !== null && to.lon !== null
@@ -63,12 +73,15 @@ export function stayOf(
 			arrive = new Date(to.time.getTime() + Math.round(minutes) * 60000);
 		}
 	}
-	const leave = person.legs.from?.time ?? null;
+	const from = person.legs.from;
+	const leave = from?.time ?? null;
 	return {
 		arrive: arrive ?? ev.startsAt,
 		leave: leave ?? ev.endsAt,
 		arriveAssumed: !arrive,
-		leaveAssumed: !leave
+		leaveAssumed: !leave,
+		arriveClock: !!arrive && arriveClock,
+		leaveClock: !!leave && from!.hasClock
 	};
 }
 
@@ -176,14 +189,14 @@ export function dayPlans(
 				.filter(({ stay }) => clamp(localDay(stay.arrive)) === day)
 				.map(({ person, stay }) => ({
 					name: person.name,
-					time: stay.arriveAssumed ? null : stay.arrive
+					time: stay.arriveClock ? stay.arrive : null
 				}))
 				.sort(byTime),
 			leaving: stays
 				.filter(({ stay }) => clamp(localDay(stay.leave)) === day)
 				.map(({ person, stay }) => ({
 					name: person.name,
-					time: stay.leaveAssumed ? null : stay.leave
+					time: stay.leaveClock ? stay.leave : null
 				}))
 				.sort(byTime),
 			fields: summarizeFields(
@@ -198,6 +211,7 @@ export function dayPlans(
 export function modeCounts(people: PlanningPerson[], direction: 'to' | 'from') {
 	const counts: Record<TravelMode | 'none', number> = {
 		car: 0,
+		flexible: 0,
 		transit: 0,
 		seeking: 0,
 		undecided: 0,

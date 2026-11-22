@@ -8,16 +8,12 @@ export function contactHref(kind: ContactKind, value: string): string | null {
 	switch (kind) {
 		case 'phone':
 			return `tel:${value}`;
-		case 'whatsapp': {
-			// wa.me needs the international number without + or leading zeros;
-			// national numbers (0170…) are assumed to be German.
-			const digits = value.replace(/^\+/, '').replace(/^00/, '').replace(/^0/, '49');
-			return `https://wa.me/${digits}`;
-		}
+		case 'whatsapp':
+			// wa.me needs the international number without "+" (numbers are stored as +…)
+			return value.startsWith('+') ? `https://wa.me/${value.slice(1)}` : null;
 		case 'signal':
-			return value.startsWith('+') || /^\d+$/.test(value)
-				? `https://signal.me/#p/${value.startsWith('+') ? value : '+49' + value.replace(/^0/, '')}`
-				: null;
+			// numbers open a chat; usernames can't be linked
+			return value.startsWith('+') ? `https://signal.me/#p/${value}` : null;
 		case 'telegram':
 			return `https://t.me/${value.replace(/^@/, '')}`;
 		case 'email':

@@ -1,17 +1,24 @@
 import { error, fail } from '@sveltejs/kit';
 import { parseFormDefinition } from '#lib/forms.js';
-import { getEventForOrganizer, listFields, saveFields } from '#lib/server/events.js';
+import {
+	getEventForOrganizer,
+	requireOrganizerEvent,
+	listFields,
+	saveFields
+} from '#lib/server/events.js';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = ({ params }) => ({
-	fields: listFields(params.id).map(({ id, type, label, help, required, config }) => ({
-		id,
-		type,
-		label,
-		help,
-		required,
-		config
-	}))
+export const load: PageServerLoad = ({ params, locals }) => ({
+	fields: listFields(requireOrganizerEvent(params.id, locals.user!.id).id).map(
+		({ id, type, label, help, required, config }) => ({
+			id,
+			type,
+			label,
+			help,
+			required,
+			config
+		})
+	)
 });
 
 export const actions: Actions = {

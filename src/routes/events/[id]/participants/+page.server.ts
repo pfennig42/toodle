@@ -1,5 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
-import { getEventForOrganizer, listFields } from '#lib/server/events.js';
+import { getEventForOrganizer, requireOrganizerEvent, listFields } from '#lib/server/events.js';
 import {
 	deleteWithdrawn,
 	listParticipants,
@@ -9,7 +9,7 @@ import {
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ params, locals }) => {
-	const e = getEventForOrganizer(params.id, locals.user!.id)!;
+	const e = requireOrganizerEvent(params.id, locals.user!.id);
 	return {
 		fields: listFields(e.id).map(({ id, type, label }) => ({ id, type, label })),
 		// Organizers see station/area names like everyone else – never coordinates or addresses.
@@ -19,6 +19,7 @@ export const load: PageServerLoad = ({ params, locals }) => {
 				direction: l.direction,
 				mode: l.mode,
 				time: l.time,
+				hasClock: l.hasClock,
 				placeLabel: l.placeLabel,
 				placeArea: l.placeArea,
 				carStatus: l.carStatus,

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Event } from './db/schema';
-import { parseEventDetails, publishBlockers, registrationState } from './event-rules';
+import {
+	detailsChange,
+	parseEventDetails,
+	publishBlockers,
+	registrationState,
+	type EventDetails
+} from './event-rules';
 
 function formData(values: Record<string, string>) {
 	const f = new FormData();
@@ -165,12 +171,54 @@ describe('registrationState', () => {
 	});
 
 	it('lists publish blockers', () => {
-		expect(publishBlockers(ev({ endsAt: new Date(Date.now() + 1e9) }))).toEqual([]);
-		expect(publishBlockers(ev({ lat: null, endsAt: new Date(Date.now() + 1e9) }))).toEqual([
-			'location'
+		const future = new Date(Date.now() + 1e9);
+		const verified = { emailVerified: true };
+		expect(publishBlockers(ev({ endsAt: future }), verified)).toEqual([]);
+		expect(publishBlockers(ev({ lat: null, endsAt: future }), verified)).toEqual(['location']);
+		expect(publishBlockers(ev({ contactEmail: null, endsAt: future }), verified)).toEqual([
+			'contact'
 		]);
-		expect(publishBlockers(ev({ contactEmail: null, endsAt: new Date(Date.now() + 1e9) }))).toEqual(
-			['contact']
+		// silent guest accounts (address not proven) may prepare events, not publish them
+		expect(publishBlockers(ev({ endsAt: future }), { emailVerified: false })).toEqual([
+			'unverified'
+		]);
+	});
+});
+
+describe('detailsChange', () => {
+	const before = {
+		startsAt: new Date('2027-07-16T16:00:00Z'),
+		endsAt: new Date('2027-07-18T12:00:00Z'),
+		startHasTime: true,
+		endHasTime: true,
+		timezone: 'Europe/Berlin',
+		lat: 50.9,
+		lon: 8.1,
+		locationName: 'Jugendhof',
+		locationAddress: 'Am Wald 3'
+	} as Event;
+	const after = (over: Partial<EventDetails>) => ({ ...before, ...over }) as EventDetails;
+
+	it('notices nothing when only other details changed', () => {
+		expect(detailsChange(before, after({ title: 'Neu' } as Partial<EventDetails>))).toEqual({
+			when: false,
+			where: false,
+			shiftDays: { to: 0, from: 0 }
+		});
+	});
+
+	it('tells by how many days arrival and departure move', () => {
+		const c = detailsChange(
+			before,
+			after({
+				startsAt: new Date('2027-07-23T16:00:00Z'),
+				endsAt: new Date('2027-07-26T12:00:00Z')
+			})
 		);
+		expect(c).toEqual({ when: true, where: false, shiftDays: { to: 7, from: 8 } });
+	});
+
+	it('notices a new place', () => {
+		expect(detailsChange(before, after({ lat: 49.6, lon: 6.1 })).where).toBe(true);
 	});
 });

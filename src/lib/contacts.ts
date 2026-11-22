@@ -20,10 +20,12 @@ export function normalizeContact(kind: ContactKind, raw: string): string | null 
 		case 'phone':
 		case 'whatsapp':
 		case 'signal': {
-			const phone = value.replace(/[\s\-/().]/g, '');
-			if (kind === 'signal' && !phone.startsWith('+') && /^[a-z0-9_.]{3,}$/i.test(value))
-				return value; // Signal username
-			return /^\+?[0-9]{6,15}$/.test(phone) ? phone : null;
+			// Signal username (e.g. "anna.42") – at least one letter, so no number slips through
+			if (kind === 'signal' && /^(?=.*[a-z])[a-z0-9_.]{3,}$/i.test(value)) return value;
+			// International format only: people from other countries open these links, and a
+			// national number ("0170…", "621…") doesn't say which country it belongs to.
+			const phone = value.replace(/[\s\-/().]/g, '').replace(/^00/, '+');
+			return /^\+[1-9][0-9]{6,14}$/.test(phone) ? phone : null;
 		}
 		case 'telegram': {
 			const handle = value.replace(/^@/, '').replace(/^https?:\/\/t\.me\//, '');

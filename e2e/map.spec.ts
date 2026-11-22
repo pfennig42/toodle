@@ -39,7 +39,8 @@ test('the folded map shows the event and the chosen places; a click adds one', a
 					address: 'Lindenplatz, 57000 Waldheim',
 					area: 'Waldheim',
 					lat: 50.91,
-					lon: 8.09
+					lon: 8.09,
+					shareName: true
 				}
 			]
 		});
@@ -48,6 +49,7 @@ test('the folded map shows the event and the chosen places; a click adds one', a
 	await page.goto(`/e/${slug}`);
 	await ready(page);
 	const leg = page.getByRole('group', { name: 'Anreise', exact: true });
+	await leg.getByRole('radio', { name: /Gemeinsam fahren/ }).click();
 	await leg.getByRole('radio', { name: /Suche Mitfahrt/ }).click();
 
 	// folded by default

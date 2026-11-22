@@ -82,7 +82,8 @@ export function renderMail(opts: {
 	paragraphs: string[];
 	items?: string[];
 	after?: string[];
-	action: { label: string; url: string };
+	/** the button – none e.g. for a cancelled event (there's nothing left to open) */
+	action?: { label: string; url: string };
 	footer: string;
 	unsubscribe?: { label: string; url: string };
 }): { text: string; html: string } {
@@ -90,7 +91,7 @@ export function renderMail(opts: {
 		...opts.paragraphs,
 		...(opts.items?.length ? [opts.items.map((i) => `• ${i}`).join('\n')] : []),
 		...(opts.after ?? []),
-		`${opts.action.label}: ${opts.action.url}`,
+		...(opts.action ? [`${opts.action.label}: ${opts.action.url}`] : []),
 		m.tagline(),
 		opts.footer,
 		...(opts.unsubscribe ? [`${opts.unsubscribe.label}: ${opts.unsubscribe.url}`] : [])
@@ -102,7 +103,7 @@ export function renderMail(opts: {
 ${opts.paragraphs.map(p).join('\n')}
 ${opts.items?.length ? `<ul style="margin:0 0 16px;padding-left:20px;line-height:1.6">${opts.items.map((i) => `<li>${escape(i)}</li>`).join('')}</ul>` : ''}
 ${(opts.after ?? []).map(p).join('\n')}
-<p style="margin:24px 0"><a href="${escape(opts.action.url)}" style="background:#2f6b4f;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block">${escape(opts.action.label)}</a></p>
+${opts.action ? `<p style="margin:24px 0"><a href="${escape(opts.action.url)}" style="background:#2f6b4f;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;display:inline-block">${escape(opts.action.label)}</a></p>` : ''}
 <p style="margin:0 0 16px;font-weight:600;color:#2f6b4f">${escape(m.tagline())}</p>
 <p style="margin:0;font-size:13px;color:#5d635f;line-height:1.5">${escape(opts.footer)}${
 		opts.unsubscribe

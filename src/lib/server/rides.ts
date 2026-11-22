@@ -55,6 +55,7 @@ export function loadRideData(eventId: string): { participants: Participant[]; li
 					{
 						mode: l.mode,
 						time: l.time,
+						hasClock: l.hasClock,
 						placeLabel: l.placeLabel,
 						placeArea: l.placeArea,
 						lat: l.lat,

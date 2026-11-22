@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { m } from '#lib/paraglide/messages.js';
+	import PublishBlockers from '#lib/components/PublishBlockers.svelte';
 	import type { PageProps } from './$types';
 
 	let { data, form }: PageProps = $props();
@@ -32,15 +33,7 @@
 			</form>
 		{:else if ev.status === 'draft'}
 			<p class="muted small">{m.event_status_draft_hint()}</p>
-			{#if s.blockers.includes('location')}
-				<p class="error small">{m.event_blocker_location()}</p>
-			{/if}
-			{#if s.blockers.includes('contact')}
-				<p class="error small">{m.event_blocker_contact()}</p>
-			{/if}
-			{#if s.blockers.includes('past')}
-				<p class="error small">{m.event_blocker_past()}</p>
-			{/if}
+			<PublishBlockers blockers={s.blockers} email={data.email} />
 			<form method="post" action="?/publish" use:enhance>
 				<button class="btn btn-primary" disabled={s.blockers.length > 0}>{m.event_publish()}</button
 				>

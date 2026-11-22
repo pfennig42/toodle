@@ -48,7 +48,7 @@ test('an event opened but not registered for stays reachable – from the profil
 	await ready(page);
 	await page
 		.getByRole('group', { name: 'Anreise', exact: true })
-		.getByRole('radio', { name: /Keine Angabe/ })
+		.getByRole('radio', { name: /Egal/ })
 		.click();
 	await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
 	await expect(page.getByText('✓ Du bist dabei!')).toBeVisible();

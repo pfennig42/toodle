@@ -19,6 +19,8 @@ export type Point = { lat: number; lon: number };
 export type RideLeg = {
 	mode: TravelMode;
 	time: Date | null;
+	/** false: only the day is known – `time` is noon then and says nothing about the hour */
+	hasClock: boolean;
 	placeLabel: string | null;
 	placeArea: string | null;
 	lat: number | null;
@@ -86,16 +88,37 @@ export function detourMinutes(
 const hasPoint = (leg: RideLeg | undefined): leg is RideLeg & { lat: number; lon: number } =>
 	!!leg && leg.lat !== null && leg.lon !== null;
 
-export const isDriver = (leg: RideLeg | undefined) => !!leg && leg.mode === 'car' && hasPoint(leg);
+/** Drivers: "car" – and "flexible" people, who drive or ride along, whatever is needed. */
+export const isDriver = (leg: RideLeg | undefined) =>
+	!!leg && (leg.mode === 'car' || leg.mode === 'flexible') && hasPoint(leg);
 
 /**
  * Seekers: looking for a ride – picked up at home, at a station, … (pick-up points), or from
  * their place (older registrations); "transit" with pick-up wishes is the older form of it.
+ * "flexible" people are seekers too – picked up at their place.
  */
 export const isSeeker = (leg: RideLeg | undefined) =>
 	!!leg &&
 	((leg.mode === 'seeking' && (leg.pickups.length > 0 || hasPoint(leg))) ||
+		(leg.mode === 'flexible' && hasPoint(leg)) ||
 		(leg.mode === 'transit' && leg.pickups.length > 0));
+
+/*
+ * Flexible people are both – until they're linked: whoever rides along doesn't drive anymore,
+ * whoever takes someone along doesn't look for a ride. (For everyone else this changes nothing.)
+ */
+const ridesWithSomeone = (id: string, dirLinks: Link[]) =>
+	dirLinks.some((l) => l.passengerRegistrationId === id);
+const takesSomeone = (id: string, dirLinks: Link[]) =>
+	dirLinks.some((l) => l.driverRegistrationId === id);
+
+/** Drives in this direction, given the links so far (`dirLinks`: this direction only). */
+export const drivesNow = (p: Participant, direction: TravelDirection, dirLinks: Link[]) =>
+	isDriver(p.legs[direction]) && !ridesWithSomeone(p.registrationId, dirLinks);
+
+/** Looks for a ride in this direction, given the links so far (`dirLinks`: this direction only). */
+export const seeksNow = (p: Participant, direction: TravelDirection, dirLinks: Link[]) =>
+	isSeeker(p.legs[direction]) && !takesSomeone(p.registrationId, dirLinks);
 
 export type SearchPoint = Point & { label: string; time: Date | null; isPickup: boolean };
 
@@ -113,7 +136,13 @@ export function searchPoints(leg: RideLeg | undefined): SearchPoint[] {
 	}
 	if (hasPoint(leg)) {
 		return [
-			{ lat: leg.lat, lon: leg.lon, label: leg.placeArea ?? '', time: leg.time, isPickup: false }
+			{
+				lat: leg.lat,
+				lon: leg.lon,
+				label: leg.placeArea ?? '',
+				time: leg.hasClock ? leg.time : null,
+				isPickup: false
+			}
 		];
 	}
 	return [];
@@ -141,7 +170,8 @@ export function bestMatch(
 	for (const via of points) {
 		const detourMin = detourMinutes(home, via, eventPoint, travel);
 		let timeGapMin: number | null = null;
-		if (driverLeg.time && via.time) {
+		// only with a time of day on both sides – "Friday" alone fits any Friday time
+		if (driverLeg.time && driverLeg.hasClock && via.time) {
 			// When would the driver be at this point? Pick-ups: on the way; otherwise compare departures.
 			const offset = via.isPickup ? travel(direction === 'to' ? home : eventPoint, via) : 0;
 			timeGapMin = Math.round((driverLeg.time.getTime() - via.time.getTime()) / 60000 + offset);
@@ -183,7 +213,8 @@ export type SeekerEntry = PersonRef & {
 	distanceKm: number | null;
 };
 
-export type ViewerRole = 'driver' | 'seeker' | 'other';
+/** "flexible": drives or rides along, not decided by a link yet – sees both lists. */
+export type ViewerRole = 'driver' | 'seeker' | 'flexible' | 'other';
 
 export type DirectionView = {
 	role: ViewerRole;
@@ -221,17 +252,16 @@ export function buildDirectionView(
 	);
 	const me = viewerId ? byId.get(viewerId) : undefined;
 	const myLeg = me?.legs[direction] ?? null;
-	const role: ViewerRole = isDriver(myLeg ?? undefined)
-		? 'driver'
-		: isSeeker(myLeg ?? undefined)
-			? 'seeker'
-			: 'other';
+	const canDrive = !!me && drivesNow(me, direction, dirLinks);
+	const canRide = !!me && seeksNow(me, direction, dirLinks);
+	const role: ViewerRole =
+		canDrive && canRide ? 'flexible' : canDrive ? 'driver' : canRide ? 'seeker' : 'other';
 
 	// Viewers who don't drive still see drivers sorted by detour from wherever they start.
 	const myPoints = role === 'driver' ? [] : searchPoints(myLeg ?? undefined);
 
 	const drivers: DriverEntry[] = participants
-		.filter((p) => p.registrationId !== viewerId && isDriver(p.legs[direction]))
+		.filter((p) => p.registrationId !== viewerId && drivesNow(p, direction, dirLinks))
 		.map((p) => {
 			const leg = p.legs[direction]!;
 			return {
@@ -254,7 +284,7 @@ export function buildDirectionView(
 
 	const mine = myPoints[0] ?? null;
 	const seekers: SeekerEntry[] = participants
-		.filter((p) => p.registrationId !== viewerId && isSeeker(p.legs[direction]))
+		.filter((p) => p.registrationId !== viewerId && seeksNow(p, direction, dirLinks))
 		.map((p) => {
 			const leg = p.legs[direction]!;
 			const driverId = driverOf.get(p.registrationId);
@@ -265,7 +295,9 @@ export function buildDirectionView(
 				leg,
 				driver: driver ? ref(driver) : null,
 				match:
-					role === 'driver' && myLeg ? bestMatch(myLeg, pts, eventPoint, direction, travel) : null,
+					(role === 'driver' || role === 'flexible') && myLeg
+						? bestMatch(myLeg, pts, eventPoint, direction, travel)
+						: null,
 				distanceKm:
 					mine && pts.length ? Math.round(Math.min(...pts.map((x) => distanceKm(mine, x)))) : null
 			};
@@ -319,6 +351,7 @@ export function restrictView(v: DirectionView, visibility: RideVisibility): Rest
 		const myDriverId = v.myDriver?.registrationId;
 		const mine = new Set(v.myPassengers.map((p) => p.registrationId));
 		// Seekers see drivers who could take them, drivers see seekers on their way – nobody else.
+		// Flexible people see both.
 		drivers =
 			v.role === 'driver'
 				? []
@@ -330,7 +363,7 @@ export function restrictView(v: DirectionView, visibility: RideVisibility): Rest
 						)
 						.slice(0, MATCHED_LIMIT);
 		seekers =
-			v.role === 'driver'
+			v.role === 'driver' || v.role === 'flexible'
 				? v.seekers
 						.filter((s) => mine.has(s.registrationId) || (!s.driver && isGoodMatch(s.match)))
 						.slice(0, MATCHED_LIMIT)
@@ -361,18 +394,23 @@ export type LinkActor = { registrationId: string | null; isOrganizer: boolean };
  * - the passenger ("I ride with …") unless the car is full / not taking anyone,
  * - the driver ("I take …"),
  * - organizers, always.
+ * Flexible people can be either – but not both at once (no chains).
  * The visibility of the event is checked separately (`linkVisible`).
  */
 export function canLink(
 	actor: LinkActor,
 	driver: Participant | undefined,
 	passenger: Participant | undefined,
-	direction: TravelDirection
+	direction: TravelDirection,
+	links: Link[]
 ): boolean {
 	if (!driver || !passenger || driver.registrationId === passenger.registrationId) return false;
 	const dLeg = driver.legs[direction];
 	const pLeg = passenger.legs[direction];
 	if (!isDriver(dLeg) || !pLeg || pLeg.mode === 'car') return false;
+	const dirLinks = links.filter((l) => l.direction === direction);
+	if (ridesWithSomeone(driver.registrationId, dirLinks)) return false;
+	if (takesSomeone(passenger.registrationId, dirLinks)) return false;
 	if (actor.isOrganizer) return true;
 	if (actor.registrationId === driver.registrationId) return true;
 	if (actor.registrationId === passenger.registrationId) return dLeg!.carStatus === 'offering';
@@ -411,9 +449,20 @@ export function canUnlink(actor: LinkActor, link: Link): boolean {
 /** Links that no longer make sense after a registration changed (e.g. driver now takes the train). */
 export function staleLinks(participants: Participant[], links: Link[]): Link[] {
 	const byId = new Map(participants.map((p) => [p.registrationId, p]));
-	return links.filter((l) => {
+	const broken = (l: Link) => {
 		const d = byId.get(l.driverRegistrationId)?.legs[l.direction];
 		const p = byId.get(l.passengerRegistrationId)?.legs[l.direction];
 		return !isDriver(d) || !p || p.mode === 'car';
-	});
+	};
+	const fine = links.filter((l) => !broken(l));
+	// A flexible person can't ride along and take people at once (only a race gets here):
+	// riding along wins, their passengers are free again.
+	return links.filter(
+		(l) =>
+			broken(l) ||
+			ridesWithSomeone(
+				l.driverRegistrationId,
+				fine.filter((o) => o.direction === l.direction)
+			)
+	);
 }

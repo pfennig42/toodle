@@ -57,6 +57,19 @@ export function utcToZoned(date: Date, tz: string): string {
 	return local.toISOString().slice(0, 16);
 }
 
+/** Calendar days between the local dates of `a` and `b` in `tz` (b later → positive). */
+export function dayDifference(a: Date, b: Date, tz: string): number {
+	const day = (d: Date) => Date.parse(utcToZoned(d, tz).slice(0, 10) + 'T00:00Z');
+	return Math.round((day(b) - day(a)) / 86_400_000);
+}
+
+/** The same local time of day `days` calendar days later in `tz` (DST-safe). */
+export function addLocalDays(date: Date, days: number, tz: string): Date {
+	const local = utcToZoned(date, tz);
+	const shifted = new Date(Date.parse(local.slice(0, 10) + 'T00:00Z') + days * 86_400_000);
+	return zonedToUtc(`${shifted.toISOString().slice(0, 10)}T${local.slice(11, 16)}`, tz) ?? date;
+}
+
 /** Which parts of an event's dates carry a time of day (see event.startHasTime etc.). */
 export type TimeFlags = { startHasTime?: boolean; endHasTime?: boolean };
 

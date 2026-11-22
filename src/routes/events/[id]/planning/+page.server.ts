@@ -1,4 +1,4 @@
-import { getEventForOrganizer, listFields } from '#lib/server/events.js';
+import { requireOrganizerEvent, listFields } from '#lib/server/events.js';
 import { listParticipants } from '#lib/server/participants.js';
 import {
 	dayPlans,
@@ -10,7 +10,7 @@ import { travelTimeFor } from '#lib/server/routing.js';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-	const e = getEventForOrganizer(params.id, locals.user!.id)!;
+	const e = requireOrganizerEvent(params.id, locals.user!.id);
 	const fields = listFields(e.id);
 	const people: PlanningPerson[] = listParticipants(e.id)
 		.filter((p) => p.status === 'active')
