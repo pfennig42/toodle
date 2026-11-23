@@ -114,7 +114,7 @@ const de: Landing = {
 		},
 		article: {
 			before: 'Warum es toodle gibt, steht im Blog: ',
-			link: 'Tüdelü, riech dich später!',
+			link: 'Tüdelü, bis später!',
 			after: ''
 		}
 	},
@@ -124,7 +124,7 @@ const de: Landing = {
 			'toodle probiert eine Idee aus: Mitfahrgelegenheiten entstehen bei der Anmeldung zur Veranstaltung, nicht in einer eigenen App. Wer sich sowieso anmeldet, sagt dabei auch, von wo die Anreise losgeht.',
 		article: {
 			before: 'Wie es dazu kam, steht ausführlich im Blog: ',
-			link: 'Tüdelü, riech dich später!',
+			link: 'Tüdelü, bis später!',
 			after: ''
 		},
 		feedback:
