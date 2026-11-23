@@ -8,11 +8,18 @@ import { db, runMigrations } from '#lib/server/db/index.js';
 import { user } from '#lib/server/db/schema.js';
 import { validateSession } from '#lib/server/auth/index.js';
 import { startNotificationJob } from '#lib/server/notifications.js';
+import { startRetentionJob } from '#lib/server/retention-job.js';
+import { backupNow, startBackupJob } from '#lib/server/backup-job.js';
 import { parseTheme, THEME_COOKIE } from '#lib/theme/index.js';
+import { isCsrfForbidden } from '#lib/server/csrf.js';
 
-export const init: ServerInit = () => {
+export const init: ServerInit = async () => {
+	// before the migrations: an update that goes wrong can be undone
+	await backupNow('before start');
 	runMigrations();
 	startNotificationJob();
+	startRetentionJob();
+	startBackupJob();
 };
 
 const handleParaglide: Handle = ({ event, resolve }) =>
@@ -38,11 +45,32 @@ const handleTheme: Handle = ({ event, resolve }) => {
 	});
 };
 
+/** CSRF protection – see #lib/server/csrf.ts (SvelteKit's own check is switched off). */
+const handleCsrf: Handle = ({ event, resolve }) => {
+	if (isCsrfForbidden(event.request, event.url)) {
+		const message = `Cross-site ${event.request.method} form submissions are forbidden`;
+		return event.request.headers.get('accept') === 'application/json'
+			? Response.json({ message }, { status: 403 })
+			: new Response(message, { status: 403 });
+	}
+	return resolve(event);
+};
+
 /** Pages that need a logged-in user. */
 // The address search (/api/geocode) is open: guests register without an account.
 const PROTECTED = ['/onboarding', '/profile', '/api/push', '/events', '/invite'];
 /** Pages a not-yet-onboarded user may visit. */
-const ONBOARDING_ALLOWED = ['/onboarding', '/logout', '/auth', '/api', '/healthz', '/unsubscribe'];
+const ONBOARDING_ALLOWED = [
+	'/onboarding',
+	'/logout',
+	'/auth',
+	'/api',
+	'/healthz',
+	'/unsubscribe',
+	'/about',
+	'/privacy',
+	'/imprint'
+];
 
 const startsWithAny = (path: string, prefixes: string[]) =>
 	prefixes.some((p) => path === p || path.startsWith(p + '/'));
@@ -97,6 +125,7 @@ const handleSecurityHeaders: Handle = async ({ event, resolve }) => {
 };
 
 export const handle: Handle = sequence(
+	handleCsrf,
 	handleSecurityHeaders,
 	handleTheme,
 	handleParaglide,

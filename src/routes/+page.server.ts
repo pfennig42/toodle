@@ -31,7 +31,8 @@ export const load: PageServerLoad = ({ locals }) => {
 			timezone: e.timezone,
 			startHasTime: e.startHasTime,
 			endHasTime: e.endHasTime,
-			state: registrationState(e, now)
+			state: registrationState(e, now),
+			waiting: e.waiting
 		}));
 	// opened, but not registered yet – e.g. left for the profile in between
 	const unfinished = listUnfinished(locals.user.id, now).map((e) => ({

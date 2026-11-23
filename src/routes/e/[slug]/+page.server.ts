@@ -22,20 +22,32 @@ import { parseAnswers, parseTravel } from '#lib/server/registration-rules.js';
 import {
 	countActiveRegistrations,
 	getRegistration,
+	hasWaitlist,
 	isFull,
+	promoteWaitlist,
 	saveRegistration,
+	waitlistPosition,
 	withdrawRegistration,
 	type FullRegistration
 } from '#lib/server/registrations.js';
-import { sendConfirmation } from '#lib/server/notifications.js';
+import {
+	notifyPromoted,
+	sendConfirmation,
+	sendWaitlistConfirmation
+} from '#lib/server/notifications.js';
 import { createSession, validateSession } from '#lib/server/auth/index.js';
 import { createRateLimiter } from '#lib/server/auth/rate-limit.js';
 import { guestAccount, parseGuest } from '#lib/server/guests.js';
 import { recordVisit } from '#lib/server/visits.js';
 import type { Actions, PageServerLoad } from './$types';
 
-/** Registering without an account creates accounts – keep that from being automated. */
-const guestsPerIp = createRateLimiter(10, 60 * 60 * 1000);
+/**
+ * Registering without an account creates accounts and sends mails – keep that from being
+ * automated. Generous per network (a whole youth group on one Wi-Fi, scanning the poster's QR
+ * code), strict per address (nobody gets flooded with confirmations).
+ */
+const guestsPerIp = createRateLimiter(60, 60 * 60 * 1000);
+const guestsPerEmail = createRateLimiter(3, 60 * 60 * 1000);
 
 function isOrganizer(eventId: string, userId: string | undefined) {
 	if (!userId) return false;
@@ -194,9 +206,11 @@ export const load: PageServerLoad = ({ params, locals, url }) => {
 		drivers: countDrivers(e.id),
 		isOrganizer: organizer,
 		loggedIn: !!me,
-		full: me
-			? isFull(e, me.id)
-			: e.capacity !== null && countActiveRegistrations(e.id) >= e.capacity,
+		// full – or people are already waiting: newcomers queue up behind them
+		full:
+			(me
+				? isFull(e, me.id)
+				: e.capacity !== null && countActiveRegistrations(e.id) >= e.capacity) || hasWaitlist(e.id),
 		// guests are asked for a contact option in the form, like accounts without one
 		hasContact: me ? listContacts(me.id).length > 0 : false,
 		/** shown (read-only) next to name and e-mail in the form */
@@ -207,6 +221,8 @@ export const load: PageServerLoad = ({ params, locals, url }) => {
 		guest: !me && url.searchParams.has('guest'),
 		// own places only – with coordinates for the map
 		savedPlaces: saved.map(({ id, label, area, lat, lon }) => ({ id, label, area, lat, lon })),
+		/** place on the waiting list (1 = next to move up) */
+		waitlistPosition: reg?.status === 'waitlisted' ? waitlistPosition(e.id, me!.id) : null,
 		registration: reg && {
 			status: reg.status,
 			comment: reg.comment,
@@ -236,7 +252,10 @@ export const actions: Actions = {
 		// Not logged in: a guest, who gives name and e-mail at the end of the form.
 		const guest = me ? null : parseGuest(form);
 		const guestBack = guest && { guestName: guest.name, guestEmail: guest.email };
-		if (guest && !guestsPerIp.take(getClientAddress()))
+		if (
+			guest &&
+			(!guestsPerIp.take(getClientAddress()) || (guest.ok && !guestsPerEmail.take(guest.email)))
+		)
 			return fail(429, { error: 'rate' as const, ...guestBack });
 		// a known address: its account – but this device is not logged in (see guestAccount)
 		const knownId =
@@ -247,14 +266,21 @@ export const actions: Actions = {
 		const state = registrationState(e);
 		const existing = userId ? getRegistration(e.id, userId) : null;
 		const isActive = existing?.status === 'active';
+		const isWaiting = existing?.status === 'waitlisted';
 		// Somebody typing an address must not be able to change that person's registration –
 		// nor bring back one they withdrew.
 		if (guest && existing) return fail(400, { error: 'guest_taken' as const, ...guestBack });
 
-		// New registrations only while open; existing ones may update travel details until the end.
-		const canRegister = state === 'open' && (isActive || !isFull(e, userId ?? ''));
+		// New registrations only while open – onto the waiting list when the event is full.
+		// Existing ones (also waiting) may update travel details until the end.
+		const canRegister = state === 'open';
+		const status: 'active' | 'waitlisted' = isActive
+			? 'active'
+			: isWaiting || isFull(e, userId ?? '') || hasWaitlist(e.id)
+				? 'waitlisted'
+				: 'active';
 		const canUpdateTravel =
-			isActive && (state === 'open' || state === 'deadline' || state === 'closed');
+			(isActive || isWaiting) && (state === 'open' || state === 'deadline' || state === 'closed');
 		if (!canRegister && !canUpdateTravel) return fail(400, { error: 'closed' as const });
 		const answersEditable = canRegister;
 
@@ -310,21 +336,25 @@ export const actions: Actions = {
 			comment,
 			answers: answers?.ok ? answers.answers : null,
 			legs: travel.legs,
-			placesToSave: ownsAccount ? travel.placesToSave : []
+			placesToSave: ownsAccount ? travel.placesToSave : [],
+			status
 		});
 		if (ownsAccount && contact && listContacts(uid).length === 0) addContact(uid, contact);
 		// Confirmation only for new (or renewed) registrations, not for every edit. Guests always
 		// get it: it's their only receipt – and tells account owners if somebody used their address.
-		if (!isActive) void sendConfirmation(e.id, uid, { guest: !!guest });
+		const waitlisted = status === 'waitlisted';
+		if (waitlisted && !isWaiting)
+			void sendWaitlistConfirmation(e.id, uid, waitlistPosition(e.id, uid) ?? 1);
+		else if (!isActive && !waitlisted) void sendConfirmation(e.id, uid, { guest: !!guest });
 
 		if (guest?.ok) {
-			if (!ownsAccount) return { guestSaved: true, sentTo: guest.email };
+			if (!ownsAccount) return { guestSaved: true, sentTo: guest.email, waitlisted };
 			// the new silent account: this device stays logged in (also for the page rendered now)
 			createSession(uid, cookies);
 			locals.user = validateSession(cookies);
-			return { saved: true, wasRegistered: false, sentTo: guest.email };
+			return { saved: true, wasRegistered: false, sentTo: guest.email, waitlisted };
 		}
-		return { saved: true, wasRegistered: isActive };
+		return { saved: true, wasRegistered: isActive || isWaiting, waitlisted };
 	},
 
 	withdraw: ({ params, locals }) => {
@@ -333,6 +363,8 @@ export const actions: Actions = {
 		const { e } = loadEvent(params.slug, me.id);
 		if (registrationState(e) === 'past') return fail(400, { error: 'closed' as const });
 		withdrawRegistration(e.id, me.id);
+		// a place is free: the waiting list moves up
+		void notifyPromoted(e.id, promoteWaitlist(e.id));
 		return { withdrawn: true };
 	}
 };

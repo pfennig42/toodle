@@ -5,6 +5,7 @@ import { user } from '#lib/server/db/schema.js';
 import { destroyOtherSessions, destroySession } from '#lib/server/auth/index.js';
 import { hashPassword } from '#lib/server/auth/crypto.js';
 import { sendLoginLink } from '#lib/server/auth/login-link.js';
+import { requestEmailChange } from '#lib/server/auth/email-change.js';
 import { createRateLimiter } from '#lib/server/auth/rate-limit.js';
 import { isValidPassword, normalizeEmail, safeNext } from '#lib/server/auth/validation.js';
 import { deleteEvent, getEventBySlug, soleOrganizedEvents } from '#lib/server/events.js';
@@ -21,8 +22,10 @@ import {
 	parsePlace,
 	updatePlace
 } from '#lib/server/profile.js';
+import { activeEventIds, promoteWaitlist } from '#lib/server/registrations.js';
 import {
 	cancellationMails,
+	notifyPromoted,
 	PREF_KINDS,
 	sendAll,
 	setPreference
@@ -31,6 +34,7 @@ import { listDevices, removeSubscription } from '#lib/server/push.js';
 import type { Actions, PageServerLoad } from './$types';
 
 const verifyPerUser = createRateLimiter(3, 15 * 60 * 1000);
+const emailChangesPerUser = createRateLimiter(3, 60 * 60 * 1000);
 
 /** Came here from an event's registration: offer the way back (the event isn't lost). */
 function backTo(next: string | null) {
@@ -164,6 +168,24 @@ export const actions: Actions = {
 		return { section: 'verify', sent: true };
 	},
 
+	/** A confirmation link to the new address – nothing changes until it's clicked. */
+	changeEmail: async ({ request, locals }) => {
+		const me = locals.user!;
+		const raw = String((await request.formData()).get('email') ?? '');
+		const email = normalizeEmail(raw);
+		if (!email || email === me.email)
+			return fail(400, { section: 'email', error: 'email', newEmail: raw.trim() });
+		if (!emailChangesPerUser.take(me.id))
+			return fail(429, { section: 'email', error: 'rate', newEmail: email });
+		try {
+			await requestEmailChange(me, email);
+		} catch (err) {
+			console.error('[profile] could not send e-mail change mail', err);
+			return fail(500, { section: 'email', error: 'mail', newEmail: email });
+		}
+		return { section: 'email', sentTo: email };
+	},
+
 	deleteAccount: async ({ request, locals, cookies }) => {
 		const confirm = normalizeEmail((await request.formData()).get('confirm'));
 		if (confirm !== locals.user!.email) return fail(400, { section: 'delete', error: 'confirm' });
@@ -171,12 +193,15 @@ export const actions: Actions = {
 		// they go too – and whoever registered for one hears that it's cancelled.
 		const sole = soleOrganizedEvents(locals.user!.id);
 		const mails = sole.flatMap((e) => cancellationMails(e.id));
+		// places this person held elsewhere become free – the waiting lists move up
+		const heldPlaces = activeEventIds(locals.user!.id);
 		destroySession(cookies);
 		db.transaction(() => {
 			for (const e of sole) deleteEvent(e.id);
 			db.delete(user).where(eq(user.id, locals.user!.id)).run();
 		});
 		void sendAll(mails);
+		for (const eventId of heldPlaces) void notifyPromoted(eventId, promoteWaitlist(eventId));
 		redirect(303, '/?deleted=1');
 	}
 };

@@ -64,7 +64,11 @@ export function participantRows(
 			p.contacts
 				.map((c) => `${c.kind === 'other' && c.label ? c.label : c.kind}: ${c.value}`)
 				.join(', '),
-			p.status === 'active' ? m.csv_status_active() : m.csv_status_withdrawn(),
+			p.status === 'active'
+				? m.csv_status_active()
+				: p.status === 'waitlisted'
+					? m.csv_status_waitlisted({ position: p.waitlistPosition ?? 0 })
+					: m.csv_status_withdrawn(),
 			time(p.createdAt)
 		];
 		for (const f of fields) {

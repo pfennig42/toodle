@@ -28,6 +28,7 @@ project.inlang/cache/
 *.db
 *.db-*
 /data
+/backups
 
 # Playwright
 /e2e/.tmp

@@ -140,8 +140,22 @@ test('a known e-mail: registered for that account, but this device is not logged
 	await page.getByLabel('E-Mail', { exact: true }).fill(kim.email);
 	await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
 	await expect(
-		page.getByText('Mit dieser E-Mail-Adresse ist schon jemand angemeldet.')
+		page.getByText('Zu dieser E-Mail-Adresse gibt es schon eine Anmeldung.')
 	).toBeVisible();
+
+	// nor brought back after the owner withdrew it
+	await ownerPage.getByText('Abmelden', { exact: true }).click();
+	await ownerPage.getByRole('button', { name: 'Ja, abmelden' }).click();
+	await expect.poll(() => activeRegistrations(kim.userId, slug)).toBe(0);
+	await startAsGuest(page, slug, 'Waldwoche');
+	await answerQuestions(page);
+	await page.getByLabel('Name', { exact: true }).fill('Noch Jemand');
+	await page.getByLabel('E-Mail', { exact: true }).fill(kim.email);
+	await page.getByRole('button', { name: 'Anmelden', exact: true }).click();
+	await expect(
+		page.getByText('Zu dieser E-Mail-Adresse gibt es schon eine Anmeldung.')
+	).toBeVisible();
+	expect(activeRegistrations(kim.userId, slug)).toBe(0);
 	await ownerCtx.close();
 });
 

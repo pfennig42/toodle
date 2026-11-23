@@ -3,6 +3,7 @@
 	import { getLocale } from '#lib/paraglide/runtime.js';
 	import { formatRange } from '#lib/datetime.js';
 	import type { RegistrationState } from '#lib/event-status.js';
+	import { m } from '#lib/paraglide/messages.js';
 	import StateBadge from './StateBadge.svelte';
 
 	let {
@@ -22,6 +23,8 @@
 			startHasTime: boolean;
 			endHasTime: boolean;
 			state: RegistrationState;
+			/** on the waiting list (participant's view) */
+			waiting?: boolean;
 		};
 	} = $props();
 
@@ -54,10 +57,16 @@
 			>{formatRange(event.startsAt, event.endsAt, event.timezone, getLocale(), event)}</span
 		>
 		{#if where}<span class="muted small">{where}</span>{/if}
+		{#if event.waiting}<span class="small waiting">⏳ {m.waitlist_title()}</span>{/if}
 	</span>
 </a>
 
 <style>
+	.waiting {
+		color: var(--coral);
+		font-weight: 600;
+	}
+
 	.event-card {
 		display: grid;
 		grid-template-columns: 3.25rem 1fr;

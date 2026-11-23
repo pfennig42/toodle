@@ -53,6 +53,12 @@
 		{#if where}<p class="muted">{where}</p>{/if}
 	</div>
 
+	{#if o.purgeAt}
+		<p class="muted small" role="note">
+			{m.overview_purge_notice({ date: formatDateTime(o.purgeAt, o.timezone, locale, false) })}
+		</p>
+	{/if}
+
 	<ul class="numbers">
 		<li>
 			<a href={resolve('/events/[id]/participants', { id: ev.id })}>

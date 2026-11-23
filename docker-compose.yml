@@ -8,6 +8,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: /data/toodle.db
+      BACKUP_DIR: /backups
       # Real client IP from Caddy (used for rate limiting)
       ADDRESS_HEADER: X-Forwarded-For
       XFF_DEPTH: '1'
@@ -16,6 +17,8 @@ services:
       - '127.0.0.1:${TOODLE_PORT:-3100}:3000'
     volumes:
       - data:/data
+      # backups on the host – picked up from there (rsync); must be writable for uid 1000 (node)
+      - ./backups:/backups
     mem_limit: 256m
     logging:
       driver: json-file

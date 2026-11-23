@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
-import { createEvent, eventIdOf, loginAs, ready, registerDirect } from './helpers';
+import { createEvent, eventIdOf, loginAs, outbox, ready, registerDirect } from './helpers';
 
 const KOELN = { area: 'Köln-Ehrenfeld', lat: 50.94, lon: 6.96 };
 
@@ -44,7 +44,7 @@ test('organizers see participants, export CSV, remove people and plan days', asy
 	// --- list
 	await page.goto(`/events/${id}/participants`);
 	await ready(page);
-	await expect(page.getByText('3 angemeldet')).toBeVisible();
+	await expect(page.locator('.count').getByText('3 angemeldet')).toBeVisible();
 
 	await page.getByRole('searchbox', { name: 'Name oder E-Mail suchen' }).fill('ann');
 	const persons = page.getByRole('listitem').filter({ has: page.locator('details') });
@@ -86,7 +86,7 @@ test('organizers see participants, export CSV, remove people and plan days', asy
 	await ben.locator('summary').click();
 	await ben.getByRole('button', { name: 'Abmelden' }).click();
 	await ben.getByRole('button', { name: 'Ben abmelden' }).click();
-	await expect(page.getByText('2 angemeldet')).toBeVisible();
+	await expect(page.locator('.count').getByText('2 angemeldet')).toBeVisible();
 	await expect(page.getByText('1 abgemeldet')).toBeVisible();
 	await expect(persons).toHaveCount(2);
 
@@ -118,4 +118,74 @@ test('organizers see participants, export CSV, remove people and plan days', asy
 	await expect(mobility.getByRole('listitem').filter({ hasText: 'Keine Angabe' })).toContainText(
 		'1'
 	);
+});
+
+test('organizers add somebody by hand – that person gets a mail to complete the details', async ({
+	page,
+	context
+}) => {
+	const olga = await loginAs(context, 'Olga Orga');
+	const slug = createEvent(olga.userId, {
+		title: 'Chorwochenende',
+		fields: [{ type: 'travel', label: 'Anreise', config: { directions: ['to'] } }]
+	});
+	const email = `telefon.${Date.now()}@example.org`;
+
+	await page.goto(`/events/${eventIdOf(slug)}/participants`);
+	await ready(page);
+	await page.getByText('+ Person hinzufügen').click();
+	await page.getByLabel('Name', { exact: true }).fill('Telefon Theo');
+	await page.getByLabel('E-Mail', { exact: true }).fill(email);
+	await page.getByRole('button', { name: 'Hinzufügen', exact: true }).click();
+	await expect(
+		page.getByText('Telefon Theo ist angemeldet und hat eine Mail bekommen.')
+	).toBeVisible();
+	await expect(page.locator('.people').getByText('Telefon Theo')).toBeVisible();
+
+	await expect
+		.poll(() => outbox(email).map((m) => m.subject))
+		.toContain('Angemeldet: Chorwochenende');
+	const mail = outbox(email).find((m) => m.subject === 'Angemeldet: Chorwochenende')!;
+	expect(mail.text).toContain('Olga Orga hat dich für „Chorwochenende“ angemeldet.');
+	expect(mail.replyTo).toBe('orga@example.org');
+
+	// a second time: already there
+	await page.getByText('+ Person hinzufügen').click();
+	await page.getByLabel('Name', { exact: true }).fill('Telefon Theo');
+	await page.getByLabel('E-Mail', { exact: true }).fill(email);
+	await page.getByRole('button', { name: 'Hinzufügen', exact: true }).click();
+	await expect(page.getByText('Diese Person ist schon angemeldet.')).toBeVisible();
+});
+
+test('organizers write to everybody registered – answers go to them, they get a copy', async ({
+	page,
+	context,
+	browser
+}) => {
+	const olga = await loginAs(context, 'Olga Orga');
+	const slug = createEvent(olga.userId, { title: 'Zeltlager', fields: [] });
+	const anna = await loginAs(await browser.newContext(), 'Anna');
+	const ben = await loginAs(await browser.newContext(), 'Ben');
+	registerDirect(slug, anna.userId, {});
+	registerDirect(slug, ben.userId, {});
+
+	await page.goto(`/events/${eventIdOf(slug)}/participants`);
+	await ready(page);
+	await page.getByText('✉ Nachricht an alle').click();
+	await page.getByLabel('Betreff').fill('Treffpunkt geändert');
+	await page
+		.getByLabel('Nachricht', { exact: true })
+		.fill('Wir treffen uns am Bahnhof.\n\nBis bald!');
+	await page.getByRole('button', { name: 'Senden', exact: true }).click();
+	await expect(page.getByText('Die Nachricht geht an 2 Personen.')).toBeVisible();
+
+	const subject = 'Zeltlager: Treffpunkt geändert';
+	for (const who of [anna, ben]) {
+		await expect.poll(() => outbox(who.email).map((m) => m.subject)).toContain(subject);
+		const mail = outbox(who.email).find((m) => m.subject === subject)!;
+		expect(mail.text).toContain('Wir treffen uns am Bahnhof.');
+		expect(mail.text).toContain('Viele Grüße, Olga Orga (Orga)');
+		expect(mail.replyTo).toBe('orga@example.org');
+	}
+	await expect.poll(() => outbox(olga.email).map((m) => m.subject)).toContain(`[Kopie] ${subject}`);
 });

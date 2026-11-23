@@ -17,7 +17,8 @@
 		errors = [],
 		submitLabel,
 		savedVisibility = null,
-		registrations = 0
+		registrations = 0,
+		offerNotify = false
 	}: {
 		values: EventFormValues;
 		errors?: string[];
@@ -25,6 +26,8 @@
 		/** Stored setting of an existing event – to ask before widening it */
 		savedVisibility?: RideVisibility | null;
 		registrations?: number;
+		/** published with registrations: offer to tell people about a new date or place */
+		offerNotify?: boolean;
 	} = $props();
 
 	// Local editable copy (the form posts natively, so plain inputs are enough).
@@ -250,6 +253,16 @@
 		<textarea name="description" rows="6" maxlength="5000" bind:value={v.description}></textarea>
 		<span class="muted small">{m.event_description_hint()}</span>
 	</label>
+
+	{#if offerNotify}
+		<label class="option confirm">
+			<input type="checkbox" name="notifyParticipants" checked />
+			<span class="small">
+				{m.event_notify_participants({ count: registrations })}
+				<span class="muted">{m.event_notify_participants_hint()}</span>
+			</span>
+		</label>
+	{/if}
 
 	<div class="actions">
 		<button class="btn btn-primary">{submitLabel}</button>

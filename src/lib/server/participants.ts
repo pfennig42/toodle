@@ -39,7 +39,9 @@ export type OrgaParticipant = {
 	userId: string;
 	name: string;
 	email: string;
-	status: 'active' | 'withdrawn';
+	status: 'active' | 'waitlisted' | 'withdrawn';
+	/** 1-based place on the waiting list (null unless waiting) */
+	waitlistPosition: number | null;
 	comment: string;
 	createdAt: Date;
 	updatedAt: Date;
@@ -57,6 +59,7 @@ export function listParticipants(eventId: string): OrgaParticipant[] {
 			name: user.name,
 			email: user.email,
 			status: registration.status,
+			queuedAt: registration.queuedAt,
 			comment: registration.comment,
 			createdAt: registration.createdAt,
 			updatedAt: registration.updatedAt
@@ -69,6 +72,17 @@ export function listParticipants(eventId: string): OrgaParticipant[] {
 	if (!regs.length) return [];
 
 	const regIds = regs.map((r) => r.id);
+	// waiting list order: who joined first moves up first
+	const queue = new Map(
+		regs
+			.filter((r) => r.status === 'waitlisted')
+			.sort(
+				(a, b) =>
+					(a.queuedAt?.getTime() ?? 0) - (b.queuedAt?.getTime() ?? 0) ||
+					a.createdAt.getTime() - b.createdAt.getTime()
+			)
+			.map((r, i) => [r.id, i + 1])
+	);
 	const answers = db.select().from(answer).where(inArray(answer.registrationId, regIds)).all();
 	const legs = db.select().from(travelLeg).where(inArray(travelLeg.registrationId, regIds)).all();
 	const pickups = legs.length
@@ -113,6 +127,7 @@ export function listParticipants(eventId: string): OrgaParticipant[] {
 		name: displayName(r),
 		email: r.email,
 		status: r.status,
+		waitlistPosition: queue.has(r.id) ? queue.get(r.id)! : null,
 		comment: r.comment,
 		createdAt: r.createdAt,
 		updatedAt: r.updatedAt,
@@ -155,7 +170,7 @@ export function listParticipants(eventId: string): OrgaParticipant[] {
 function setStatus(eventId: string, registrationId: string, status: 'active' | 'withdrawn') {
 	const res = db
 		.update(registration)
-		.set({ status, updatedAt: new Date() })
+		.set({ status, queuedAt: null, updatedAt: new Date() })
 		.where(and(eq(registration.id, registrationId), eq(registration.eventId, eventId)))
 		.run();
 	if (status === 'withdrawn') cleanupRideLinks(eventId);
@@ -168,6 +183,28 @@ export const withdrawByOrganizer = (eventId: string, registrationId: string) =>
 
 export const reactivateByOrganizer = (eventId: string, registrationId: string) =>
 	setStatus(eventId, registrationId, 'active');
+
+/**
+ * The organizers register somebody themselves (docs/konzept.md 4.6) – also beyond the capacity,
+ * that's their call. Brings back a withdrawn registration; 'exists' if already registered.
+ */
+export function addByOrganizer(eventId: string, userId: string): 'added' | 'exists' {
+	const existing = db
+		.select()
+		.from(registration)
+		.where(and(eq(registration.eventId, eventId), eq(registration.userId, userId)))
+		.get();
+	if (existing?.status === 'active') return 'exists';
+	if (existing) {
+		db.update(registration)
+			.set({ status: 'active', queuedAt: null, updatedAt: new Date() })
+			.where(eq(registration.id, existing.id))
+			.run();
+	} else {
+		db.insert(registration).values({ eventId, userId }).run();
+	}
+	return 'added';
+}
 
 /** Deletes a withdrawn registration for good (answers and travel data go with it). */
 export function deleteWithdrawn(eventId: string, registrationId: string): boolean {

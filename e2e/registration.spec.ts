@@ -1,5 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { addPlace, createEvent, loginAs, mockGeocoder, passDeadline, ready } from './helpers';
+import {
+	addPlace,
+	createEvent,
+	loginAs,
+	mockGeocoder,
+	outbox,
+	passDeadline,
+	ready
+} from './helpers';
 
 const FIELDS = [
 	{
@@ -177,12 +185,30 @@ test('full events and passed deadlines', async ({ page, context, browser }) => {
 	await ready(firstPage);
 	await firstPage.getByRole('button', { name: 'Anmelden', exact: true }).click();
 	await expect(firstPage.getByText('✓ Du bist dabei!')).toBeVisible();
-	await first.close();
 
+	// full: the second person goes onto the waiting list …
 	const second = await loginAs(context, 'Zweite Person');
 	addPlace(second.userId, 'Arbeit', 'Bonn-Gronau', 50.72, 7.11);
 	await page.goto(`/e/${fullSlug}`);
-	await expect(page.getByText('Die Veranstaltung ist leider ausgebucht.')).toBeVisible();
+	await ready(page);
+	await expect(page.getByText(/Die Veranstaltung ist voll/)).toBeVisible();
+	await page.getByRole('button', { name: 'Auf die Warteliste' }).click();
+	await expect(page.getByText('Du stehst auf der Warteliste – Platz 1.')).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Mitfahrten ansehen' })).toHaveCount(0);
+	await expect
+		.poll(() => outbox(second.email).map((m) => m.subject))
+		.toContain('Warteliste: Kleines Treffen');
+
+	// … and moves up as soon as the first one withdraws
+	await firstPage.getByText('Abmelden', { exact: true }).click();
+	await firstPage.getByRole('button', { name: 'Ja, abmelden' }).click();
+	await expect
+		.poll(() => outbox(second.email).map((m) => m.subject))
+		.toContain('Du bist dabei: Kleines Treffen');
+	await page.reload();
+	await ready(page);
+	await expect(page.getByText('✓ Du bist dabei!')).toBeVisible();
+	await first.close();
 
 	// After the deadline: answers locked, travel still editable
 	const slug = createEvent(owner.userId, { title: 'Herbstfahrt', fields: FIELDS });

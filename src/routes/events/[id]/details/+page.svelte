@@ -25,6 +25,7 @@
 			submitLabel={m.save()}
 			savedVisibility={data.savedVisibility}
 			registrations={data.registrations}
+			offerNotify={data.event.status === 'published' && data.registrations > 0}
 		/>
 	{/key}
 	{#if form?.saved}

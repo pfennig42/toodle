@@ -1,0 +1,1 @@
+ALTER TABLE `registration` ADD `queued_at` integer;

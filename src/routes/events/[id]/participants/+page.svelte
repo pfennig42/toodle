@@ -10,7 +10,7 @@
 
 	let { data, form }: PageProps = $props();
 
-	type Filter = 'active' | 'withdrawn' | 'all';
+	type Filter = 'active' | 'waitlisted' | 'withdrawn' | 'all';
 	let query = $state('');
 	let filter = $state<Filter>('active');
 	let sort = $state<'name' | 'newest' | 'oldest'>('name');
@@ -18,7 +18,8 @@
 
 	const locale = getLocale();
 	const active = $derived(data.participants.filter((p) => p.status === 'active'));
-	const withdrawnCount = $derived(data.participants.length - active.length);
+	const withdrawnCount = $derived(data.participants.filter((p) => p.status === 'withdrawn').length);
+	const waitingCount = $derived(data.participants.filter((p) => p.status === 'waitlisted').length);
 
 	const shown = $derived.by(() => {
 		const q = query.trim().toLowerCase();
@@ -43,17 +44,135 @@
 			month: 'short'
 		}).format(d);
 
-	const filters: { value: Filter; label: () => string }[] = [
-		{ value: 'active', label: m.participants_filter_active },
-		{ value: 'withdrawn', label: m.participants_filter_withdrawn },
-		{ value: 'all', label: m.participants_filter_all }
-	];
+	const filters = $derived(
+		[
+			{ value: 'active', label: m.participants_filter_active, show: true },
+			{ value: 'waitlisted', label: m.participants_filter_waitlisted, show: waitingCount > 0 },
+			{ value: 'withdrawn', label: m.participants_filter_withdrawn, show: withdrawnCount > 0 },
+			{ value: 'all', label: m.participants_filter_all, show: true }
+		].filter((f) => f.show) as { value: Filter; label: () => string }[]
+	);
 </script>
 
 <div class="stack-lg">
 	<section class="stack">
+		<details class="card add" open={!!form && 'addError' in form}>
+			<summary>{m.participants_add()}</summary>
+			<form
+				method="post"
+				action="?/add"
+				class="stack"
+				use:enhance={() =>
+					async ({ update }) =>
+						update({ reset: true })}
+			>
+				<p class="small muted">{m.participants_add_hint()}</p>
+				<div class="row">
+					<label class="field">
+						<span>{m.field_name()}</span>
+						<input
+							name="name"
+							required
+							maxlength="80"
+							autocomplete="off"
+							value={form && 'addError' in form ? form.name : ''}
+						/>
+					</label>
+					<label class="field">
+						<span>{m.field_email()}</span>
+						<input
+							name="email"
+							type="email"
+							required
+							autocomplete="off"
+							value={form && 'addError' in form ? form.email : ''}
+						/>
+					</label>
+				</div>
+				{#if form?.addError}
+					<p class="error small" role="alert">
+						{{
+							unpublished: m.participants_add_error_unpublished,
+							unverified: m.participants_add_error_unverified,
+							invalid: m.participants_add_error_invalid,
+							rate: m.participants_add_error_rate,
+							exists: m.participants_add_error_exists
+						}[form.addError]()}
+					</p>
+				{/if}
+				<div class="actions">
+					<button class="btn btn-primary small">{m.participants_add_submit()}</button>
+				</div>
+			</form>
+		</details>
+		{#if active.length}
+			<details class="card add" open={!!form?.messageError}>
+				<summary>{m.participants_message()}</summary>
+				<form
+					method="post"
+					action="?/message"
+					class="stack"
+					use:enhance={() =>
+						async ({ update }) =>
+							update({ reset: true })}
+				>
+					<p class="small muted">
+						{m.participants_message_hint({ count: active.length })}
+					</p>
+					<label class="field">
+						<span>{m.participants_message_subject()}</span>
+						<input
+							name="subject"
+							required
+							maxlength="120"
+							value={form?.messageError ? form.subject : ''}
+						/>
+					</label>
+					<label class="field">
+						<span>{m.participants_message_text()}</span>
+						<textarea name="text" rows="6" required maxlength="5000"
+							>{form?.messageError ? form.text : ''}</textarea
+						>
+					</label>
+					{#if waitingCount}
+						<label class="check-row small">
+							<input
+								type="checkbox"
+								name="waitlist"
+								checked={!!form?.messageError && form.waitlist}
+							/>
+							{m.participants_message_waitlist({ count: waitingCount })}
+						</label>
+					{/if}
+					{#if form?.messageError}
+						<p class="error small" role="alert">
+							{{
+								unpublished: m.participants_add_error_unpublished,
+								unverified: m.participants_add_error_unverified,
+								invalid: m.participants_message_error_invalid,
+								rate: m.participants_message_error_rate
+							}[form.messageError]()}
+						</p>
+					{/if}
+					<div class="actions">
+						<button class="btn btn-primary small">{m.participants_message_send()}</button>
+					</div>
+				</form>
+			</details>
+		{/if}
+		{#if form?.done === 'message'}
+			<p class="small" role="status">
+				{m.participants_message_sent({ count: form.messageCount ?? 0 })}
+			</p>
+		{/if}
+		{#if form?.done === 'added'}
+			<p class="small" role="status">{m.participants_done_added({ name: form.addedName })}</p>
+		{/if}
 		<p class="count">
 			{m.participants_count({ count: active.length })}{data.capacity ? ` / ${data.capacity}` : ''}
+			{#if waitingCount}<span class="small muted"
+					>· {m.participants_waiting_count({ count: waitingCount })}</span
+				>{/if}
 			{#if withdrawnCount}<span class="small muted"
 					>· {m.participants_withdrawn_count({ count: withdrawnCount })}</span
 				>{/if}
@@ -75,7 +194,7 @@
 					<option value="oldest">{m.participants_sort_oldest()}</option>
 				</select>
 			</div>
-			{#if withdrawnCount}
+			{#if withdrawnCount || waitingCount}
 				<div class="segmented" role="group" aria-label={m.participants_filter()}>
 					{#each filters as f (f.value)}
 						<button
@@ -87,7 +206,7 @@
 				</div>
 			{/if}
 
-			{#if form?.done}
+			{#if form?.done && form.done !== 'added' && form.done !== 'message'}
 				<p class="small" role="status">
 					{form.done === 'withdrawn'
 						? m.participants_done_withdrawn()
@@ -116,6 +235,12 @@
 										{/each}
 										{#if p.status === 'withdrawn'}
 											<span class="badge">{m.participants_status_withdrawn()}</span>
+										{:else if p.status === 'waitlisted'}
+											<span class="badge"
+												>{m.participants_status_waiting({
+													position: p.waitlistPosition ?? 0
+												})}</span
+											>
 										{:else}
 											<span class="muted">{date(p.createdAt)}</span>
 										{/if}
@@ -153,7 +278,13 @@
 											: ''}
 									</p>
 									<div class="actions">
-										{#if p.status === 'active'}
+										{#if p.status === 'waitlisted'}
+											<form method="post" action="?/reactivate" use:enhance>
+												<input type="hidden" name="registration" value={p.registrationId} />
+												<button class="btn btn-primary small">{m.participants_promote()}</button>
+											</form>
+										{/if}
+										{#if p.status === 'active' || p.status === 'waitlisted'}
 											{#if confirming === p.registrationId}
 												<form
 													method="post"
@@ -253,6 +384,12 @@
 </div>
 
 <style>
+	.check-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+
 	.count {
 		margin: 0;
 		font-size: 1.15rem;

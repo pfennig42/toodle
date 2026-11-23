@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	eventSoonDue,
 	groupNotices,
 	MATCH_MAIL_GAP_MS,
 	matchRef,
@@ -195,5 +196,23 @@ describe('travelReminderDue', () => {
 		).toBe(false);
 		expect(travelReminderDue(ev, open, ['to'], new Date(startsAt.getTime() + 1))).toBe(false);
 		expect(travelReminderDue(ev, open, [], now)).toBe(false);
+	});
+});
+
+describe('eventSoonDue', () => {
+	const ev = { startsAt: new Date('2027-07-16T16:00:00Z') };
+	const old = { createdAt: new Date('2027-06-01T00:00:00Z') };
+	const at = (iso: string) => new Date(iso);
+
+	it('fires within the last two days before the start', () => {
+		expect(eventSoonDue(ev, old, at('2027-07-14T15:00:00Z'))).toBe(false);
+		expect(eventSoonDue(ev, old, at('2027-07-14T16:00:00Z'))).toBe(true);
+		expect(eventSoonDue(ev, old, at('2027-07-16T15:59:00Z'))).toBe(true);
+		expect(eventSoonDue(ev, old, at('2027-07-16T16:00:00Z'))).toBe(false);
+	});
+
+	it('skips people who registered within those two days', () => {
+		const late = { createdAt: new Date('2027-07-15T10:00:00Z') };
+		expect(eventSoonDue(ev, late, at('2027-07-15T12:00:00Z'))).toBe(false);
 	});
 });

@@ -9,6 +9,7 @@ import {
 	setEventStatus
 } from '#lib/server/events.js';
 import { countActiveRegistrations } from '#lib/server/registrations.js';
+import { purgeDate } from '#lib/server/retention.js';
 import { seeksNow } from '#lib/server/ride-matching.js';
 import { loadRideData } from '#lib/server/rides.js';
 import type { Actions, PageServerLoad } from './$types';
@@ -52,7 +53,9 @@ export const load: PageServerLoad = async ({ params, locals, url, parent }) => {
 			registrations: countActiveRegistrations(e.id),
 			hasTravel: directions.length > 0,
 			seekingOpen,
-			blockers: publishBlockers(e, locals.user!)
+			blockers: publishBlockers(e, locals.user!),
+			// over: say when the registrations go (data retention) – time to export them
+			purgeAt: e.endsAt < new Date() ? purgeDate(e.endsAt) : null
 		},
 		qr,
 		email: locals.user!.email,

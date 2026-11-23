@@ -70,6 +70,21 @@ export const loginToken = sqliteTable(
 	(t) => [index('login_token_email_idx').on(t.email)]
 );
 
+/** Pending change of an account's e-mail address; id = SHA-256 of the token mailed to it. */
+export const emailChange = sqliteTable(
+	'email_change',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		newEmail: text('new_email').notNull(),
+		expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+		createdAt: createdAt()
+	},
+	(t) => [index('email_change_user_idx').on(t.userId)]
+);
+
 export const contact = sqliteTable(
 	'contact',
 	{
@@ -233,7 +248,8 @@ export const formField = sqliteTable(
 export type Event = typeof event.$inferSelect;
 export type FormField = typeof formField.$inferSelect;
 
-export const REGISTRATION_STATUSES = ['active', 'withdrawn'] as const;
+/** waitlisted: the event was full – moves up automatically when a place frees up */
+export const REGISTRATION_STATUSES = ['active', 'waitlisted', 'withdrawn'] as const;
 
 export const registration = sqliteTable(
 	'registration',
@@ -247,6 +263,8 @@ export const registration = sqliteTable(
 			.references(() => user.id, { onDelete: 'cascade' }),
 		status: text('status', { enum: REGISTRATION_STATUSES }).notNull().default('active'),
 		comment: text('comment').notNull().default(''),
+		/** When the person joined the waiting list – the order in which people move up */
+		queuedAt: integer('queued_at', { mode: 'timestamp' }),
 		createdAt: createdAt(),
 		updatedAt: integer('updated_at', { mode: 'timestamp' })
 			.notNull()
@@ -358,7 +376,8 @@ export const NOTIFICATION_KINDS = [
 	'confirmation',
 	'ride_match',
 	'ride_link',
-	'travel_reminder'
+	'travel_reminder',
+	'event_soon'
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

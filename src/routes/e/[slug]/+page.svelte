@@ -14,7 +14,13 @@
 	let editing = $state(false);
 	const ev = $derived(data.event);
 	const address = $derived(addressWithoutName(ev.locationName, ev.locationAddress));
-	const reg = $derived(data.registration?.status === 'active' ? data.registration : null);
+	// registered – or waiting for a place (then: no rides yet)
+	const reg = $derived(
+		data.registration?.status === 'active' || data.registration?.status === 'waitlisted'
+			? data.registration
+			: null
+	);
+	const waiting = $derived(reg?.status === 'waitlisted');
 	const near = $derived(
 		ev.lat !== null && ev.lon !== null
 			? { lat: ev.lat, lon: ev.lon, label: ev.locationName || ev.title }
@@ -24,7 +30,8 @@
 	const canEditTravel = $derived(
 		!!reg && (ev.state === 'open' || ev.state === 'deadline' || ev.state === 'closed')
 	);
-	const canRegister = $derived(ev.state === 'open' && !data.full);
+	// full: still open – for the waiting list
+	const canRegister = $derived(ev.state === 'open');
 	// Guests: via "continue without logging in" – or back from the server with an error (a plain
 	// form post goes to "?/register" and loses "?guest" on the way).
 	const guestMode = $derived(!data.loggedIn && (data.guest || (!!form && 'guestName' in form)));
@@ -155,17 +162,30 @@
 
 		{#if guestDone}
 			<div role="status">
-				<p class="yes">✓ {m.registration_you_are_registered()}</p>
+				<p class="yes">
+					{form && 'waitlisted' in form && form.waitlisted
+						? `⏳ ${m.waitlist_on()}`
+						: `✓ ${m.registration_you_are_registered()}`}
+				</p>
 				<p>{m.guest_sent_notice({ email: guestDone })}</p>
 				<p class="muted">{m.guest_known_hint()}</p>
 			</div>
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- login with return path -->
 			<a class="btn align-start" href={loginHref}>{m.guest_known_login()}</a>
 		{:else if reg && !editing}
-			<div role="status">
-				<p class="yes">✓ {m.registration_you_are_registered()}</p>
-				<p class="muted">{m.tagline()}</p>
-			</div>
+			{#if waiting}
+				<div role="status">
+					<p class="yes">
+						⏳ {m.waitlist_you_are_waiting({ position: data.waitlistPosition ?? 1 })}
+					</p>
+					<p class="muted">{m.waitlist_how()}</p>
+				</div>
+			{:else}
+				<div role="status">
+					<p class="yes">✓ {m.registration_you_are_registered()}</p>
+					<p class="muted">{m.tagline()}</p>
+				</div>
+			{/if}
 			<RegistrationSummary
 				fields={data.fields}
 				answers={reg.answers}
@@ -182,9 +202,11 @@
 					>
 				</p>
 			{/if}
-			<a class="btn btn-primary align-start" href={resolve('/e/[slug]/rides', { slug: ev.slug })}
-				>{m.rides_open()}</a
-			>
+			{#if !waiting}
+				<a class="btn btn-primary align-start" href={resolve('/e/[slug]/rides', { slug: ev.slug })}
+					>{m.rides_open()}</a
+				>
+			{/if}
 			<div class="quiet-actions">
 				{#if canEditTravel}
 					<button type="button" class="link-btn" onclick={() => (editing = true)}>
@@ -193,7 +215,9 @@
 				{/if}
 				{#if ev.state !== 'past' && ev.state !== 'archived'}
 					<details class="withdraw">
-						<summary class="link-btn">{m.registration_withdraw()}</summary>
+						<summary class="link-btn"
+							>{waiting ? m.waitlist_leave() : m.registration_withdraw()}</summary
+						>
 						<form method="post" action="?/withdraw" class="stack-sm" use:enhance>
 							<p class="small muted">{m.registration_withdraw_confirm()}</p>
 							<button class="btn btn-danger align-start">{m.registration_withdraw_submit()}</button>
@@ -202,8 +226,11 @@
 				{/if}
 			</div>
 		{:else if showForm}
-			<h2>{reg ? m.registration_edit() : m.public_join_title()}</h2>
+			<h2>
+				{reg ? m.registration_edit() : data.full ? m.waitlist_title() : m.public_join_title()}
+			</h2>
 			{#if reg}<p class="muted small">{m.registration_editing_hint()}</p>{/if}
+			{#if !reg && data.full}<p class="notice">{m.waitlist_full_hint()}</p>{/if}
 			<RegistrationForm
 				fields={data.fields}
 				answers={reg?.answers ?? data.registration?.answers ?? {}}
@@ -220,14 +247,12 @@
 				contactError={formErrors.contact}
 				rideVisibility={ev.rideVisibility}
 				guest={guestMode ? guestValues : null}
+				waitlist={!reg && data.full}
 				oncancel={reg ? () => (editing = false) : undefined}
 			/>
-		{:else if ev.state === 'open' && data.full}
-			<h2>{m.public_join_title()}</h2>
-			<p class="muted">{m.registration_full()}</p>
 		{:else if ev.state === 'open' && !data.loggedIn}
-			<h2>{m.public_join_title()}</h2>
-			<p>{m.public_join_text()}</p>
+			<h2>{data.full ? m.waitlist_title() : m.public_join_title()}</h2>
+			<p>{data.full ? m.waitlist_full_hint() : m.public_join_text()}</p>
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- login with return path -->
 			<a class="btn btn-primary align-start" href={loginHref}>{m.public_join_button()}</a>
 		{:else if ev.state === 'draft'}

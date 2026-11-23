@@ -6,6 +6,7 @@ import {
 	nameFromProperties
 } from './geocode-format.js';
 import { distanceKm } from './ride-matching.js';
+import { userAgent } from './user-agent.js';
 
 /** A map click keeps a place's name only this close to it – otherwise it's just somewhere nearby. */
 const REVERSE_NAME_KM = 0.05;
@@ -64,7 +65,7 @@ export async function reverseGeocode(
 
 async function fetchFeatures(url: URL): Promise<PhotonFeature[]> {
 	const res = await fetch(url, {
-		headers: { 'user-agent': 'toodle (self-hosted event & ride sharing app)' },
+		headers: { 'user-agent': userAgent() },
 		signal: AbortSignal.timeout(5000)
 	});
 	if (!res.ok) throw new Error(`Geocoder responded with ${res.status}`);

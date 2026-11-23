@@ -30,12 +30,24 @@ Ohne `SMTP_HOST` werden Mails (z. B. Login-Links) in der Server-Konsole ausgegeb
 
 ### Benachrichtigungen
 
-- **Sofort:** Anmeldebestätigung (mit Kalendereintrag) und Hinweis, wenn jemand anderes eine Mitfahrt einträgt.
+- **Sofort:** Anmeldebestätigung (mit Kalendereintrag) bzw. Wartelisten-Bestätigung, Hinweis, wenn jemand anderes eine
+  Mitfahrt einträgt, Mail an von der Orga hinzugefügte Personen, „Du bist nachgerückt“ (Warteliste), Änderung von
+  Termin/Ort (abwählbar) und Absage, wenn eine Veranstaltung gelöscht wird, sowie Rundmails der Orga (höchstens 5 pro
+  Tag und Veranstaltung).
 - **Hintergrund-Job** (alle `NOTIFY_INTERVAL` Sekunden, Standard 600, `0` = aus): Mitfahr-Hinweise an Suchende und
-  Fahrende (höchstens alle 3 h pro Person und Event, nie zweimal zur selben Person) und eine einmalige Erinnerung,
-  wenn die Reise 7 Tage vorher (bzw. 2 Tage vor Anmeldeschluss) noch offen ist.
-- Jede Art ist im Profil oder per Link in der Mail abbestellbar. Was verschickt wurde, steht in der Tabelle
+  Fahrende (höchstens alle 3 h pro Person und Event, nie zweimal zur selben Person), eine einmalige Erinnerung, wenn
+  die Reise 7 Tage vorher (bzw. 2 Tage vor Anmeldeschluss) noch offen ist, und „Bald geht's los“ 2 Tage vor Beginn
+  (mit der eigenen Mitfahrt).
+- Hinweise und Erinnerungen sind im Profil oder per Link in der Mail abbestellbar; was die Veranstaltung selbst betrifft
+  (Änderung, Absage, Nachrücken, Rundmail), kommt immer. Was der Job verschickt hat, steht in der Tabelle
   `notification`.
+
+### Datenhaltung
+
+Täglich (und beim Start) löscht toodle die Anmeldungen samt Antworten, Reisedaten und Mitfahrten von Veranstaltungen,
+die seit mehr als einem Jahr vorbei sind. Die Veranstaltung selbst bleibt zum Duplizieren erhalten; die Orga sieht in
+der Übersicht, wann gelöscht wird. Außerdem gehen Gastkonten ohne Anmeldung (älter als 30 Tage), abgelaufene Sitzungen
+und Links. Impressum und Datenschutzerklärung stehen in [src/lib/legal.ts](src/lib/legal.ts).
 
 ## Betrieb (Docker + Caddy)
 
@@ -51,8 +63,33 @@ Danach den Block aus [deploy/Caddyfile.snippet](deploy/Caddyfile.snippet) in `/s
 Caddy neu laden (`docker compose -f /srv/edge/compose.yml exec caddy caddy reload --config /etc/caddy/Caddyfile`
 bzw. passend zum Dateinamen).
 
-Die Datenbank liegt im Volume `toodle_data` (`/data/toodle.db`). Backup: Datei kopieren
-(bei laufendem Betrieb besser per `sqlite3 /data/toodle.db '.backup /data/backup.db'`).
+Die Datenbank liegt im Volume `toodle_data` (`/data/toodle.db`).
+
+### Backups
+
+Mit `BACKUP_DIR` (in `docker-compose.yml`: `./backups` neben der Compose-Datei, also `/srv/toodle/backups`) sichert
+toodle die Datenbank selbst – beim Start (vor den Migrationen) und dann stündlich, aber nur wenn sich etwas geändert
+hat. Jede Sicherung ist eine geprüfte (`integrity_check`), gzip-komprimierte Kopie
+(`toodle-JJJJMMTT-HHMMSSZ-<hash>.db.gz`); sie wird unter einem `.tmp-…`-Namen geschrieben und erst fertig umbenannt.
+Beim Abholen per rsync also `--exclude '.tmp-*'` setzen.
+
+Aufbewahrt wird gestaffelt: alles der letzten 24 Stunden, dann die neueste pro Tag (14 Tage), pro Woche (8 Wochen)
+und pro Monat (6 Monate) – höchstens gut 50 Dateien. Älteres wird gelöscht, damit gelöschte Daten nicht in alten
+Sicherungen weiterleben (Datenschutzerklärung: höchstens sechs Monate). Die neueste Sicherung bleibt immer.
+
+Das Verzeichnis muss für den Container-Nutzer (uid 1000) beschreibbar sein:
+`mkdir -p /srv/toodle/backups && sudo chown 1000:1000 /srv/toodle/backups`.
+
+Wiederherstellen:
+
+```sh
+cd /srv/toodle
+docker compose stop toodle
+docker run --rm -v toodle_data:/data -v "$PWD/backups:/backups:ro" alpine sh -c \
+  'rm -f /data/toodle.db-wal /data/toodle.db-shm &&
+   gunzip -c /backups/toodle-….db.gz > /data/toodle.db && chown 1000:1000 /data/toodle.db'
+docker compose start toodle
+```
 
 ### Push-Benachrichtigungen
 

@@ -40,6 +40,16 @@ export function getRegistration(eventId: string, userId: string) {
 	};
 }
 
+export function getRegistrationById(eventId: string, registrationId: string) {
+	return (
+		db
+			.select()
+			.from(registration)
+			.where(and(eq(registration.id, registrationId), eq(registration.eventId, eventId)))
+			.get() ?? null
+	);
+}
+
 export type FullRegistration = NonNullable<ReturnType<typeof getRegistration>>;
 
 export function countActiveRegistrations(eventId: string, excludeUserId?: string): number {
@@ -73,23 +83,34 @@ export function saveRegistration(input: {
 	answers: Map<string, AnswerValue> | null;
 	legs: ParsedLeg[];
 	placesToSave: PlaceSnapshot[];
+	/** 'waitlisted' when the event is full (the place in the queue is kept on later edits) */
+	status?: 'active' | 'waitlisted';
 }) {
 	db.transaction(() => {
 		const now = new Date();
+		const status = input.status ?? 'active';
 		let reg = db
 			.select()
 			.from(registration)
 			.where(and(eq(registration.eventId, input.eventId), eq(registration.userId, input.userId)))
 			.get();
+		const queuedAt =
+			status === 'waitlisted' ? (reg?.status === 'waitlisted' ? reg.queuedAt : now) : null;
 		if (reg) {
 			db.update(registration)
-				.set({ status: 'active', comment: input.comment, updatedAt: now })
+				.set({ status, queuedAt, comment: input.comment, updatedAt: now })
 				.where(eq(registration.id, reg.id))
 				.run();
 		} else {
 			reg = db
 				.insert(registration)
-				.values({ eventId: input.eventId, userId: input.userId, comment: input.comment })
+				.values({
+					eventId: input.eventId,
+					userId: input.userId,
+					comment: input.comment,
+					status,
+					queuedAt
+				})
 				.returning()
 				.get();
 		}
@@ -178,20 +199,85 @@ export function shiftTravelDays(
 
 export function withdrawRegistration(eventId: string, userId: string) {
 	db.update(registration)
-		.set({ status: 'withdrawn', updatedAt: new Date() })
+		.set({ status: 'withdrawn', queuedAt: null, updatedAt: new Date() })
 		.where(and(eq(registration.eventId, eventId), eq(registration.userId, userId)))
 		.run();
 	cleanupRideLinks(eventId);
 }
 
-/** Events the user is (actively) registered for – for the dashboard. */
+/* --------------------------------------------------------------- waiting list */
+
+/** 1-based place on the waiting list, or null if not waiting. */
+export function waitlistPosition(eventId: string, userId: string): number | null {
+	const queue = db
+		.select({ userId: registration.userId })
+		.from(registration)
+		.where(and(eq(registration.eventId, eventId), eq(registration.status, 'waitlisted')))
+		.orderBy(asc(registration.queuedAt), asc(registration.createdAt))
+		.all();
+	const i = queue.findIndex((r) => r.userId === userId);
+	return i < 0 ? null : i + 1;
+}
+
+/**
+ * Places free (somebody withdrew, more capacity): the first people on the waiting list move up,
+ * in the order they joined. Returns their user ids – the caller tells them (notifyPromoted).
+ * Nothing moves once the event is over.
+ */
+export function promoteWaitlist(eventId: string, now = new Date()): string[] {
+	return db.transaction(() => {
+		const e = db.select().from(event).where(eq(event.id, eventId)).get();
+		if (!e || e.status !== 'published' || e.endsAt <= now) return [];
+		const queue = db
+			.select({ id: registration.id, userId: registration.userId })
+			.from(registration)
+			.where(and(eq(registration.eventId, eventId), eq(registration.status, 'waitlisted')))
+			.orderBy(asc(registration.queuedAt), asc(registration.createdAt))
+			.all();
+		const free = e.capacity === null ? queue.length : e.capacity - countActiveRegistrations(e.id);
+		const moving = queue.slice(0, Math.max(0, free));
+		for (const r of moving) activateRegistration(r.id);
+		return moving.map((r) => r.userId);
+	});
+}
+
+/** Somebody is waiting – newcomers queue up behind them, even if a place happens to be free. */
+export function hasWaitlist(eventId: string): boolean {
+	return !!db
+		.select({ id: registration.id })
+		.from(registration)
+		.where(and(eq(registration.eventId, eventId), eq(registration.status, 'waitlisted')))
+		.get();
+}
+
+/** Events where the user holds a place (active registration). */
+export function activeEventIds(userId: string): string[] {
+	return db
+		.select({ eventId: registration.eventId })
+		.from(registration)
+		.where(and(eq(registration.userId, userId), eq(registration.status, 'active')))
+		.all()
+		.map((r) => r.eventId);
+}
+
+/** Makes a (waiting or withdrawn) registration active. */
+export function activateRegistration(registrationId: string) {
+	db.update(registration)
+		.set({ status: 'active', queuedAt: null, updatedAt: new Date() })
+		.where(eq(registration.id, registrationId))
+		.run();
+}
+
+/** Events the user is registered for (or waiting for a place) – for the dashboard. */
 export function listRegistrationsForUser(userId: string) {
 	return db
-		.select({ event })
+		.select({ event, status: registration.status })
 		.from(registration)
 		.innerJoin(event, eq(event.id, registration.eventId))
-		.where(and(eq(registration.userId, userId), eq(registration.status, 'active')))
+		.where(
+			and(eq(registration.userId, userId), inArray(registration.status, ['active', 'waitlisted']))
+		)
 		.orderBy(asc(event.startsAt))
 		.all()
-		.map((r) => r.event);
+		.map((r) => ({ ...r.event, waiting: r.status === 'waitlisted' }));
 }

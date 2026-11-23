@@ -92,6 +92,20 @@
       "when": 1795038124125,
       "tag": "0012_event_contact_email",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1795388776706,
+      "tag": "0013_waitlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1795389184173,
+      "tag": "0014_email_change",
+      "breakpoints": true
     }
   ]
 }

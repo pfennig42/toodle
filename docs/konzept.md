@@ -165,7 +165,11 @@ Orga das bestätigen. Im Anmeldeformular steht, wer die eigene Fahrt sieht.
   Auswahlfeldern („12 × vegetarisch“).
 - **Mobilitätsübersicht**: wie viele Auto/ÖV/suchend/offen; wer hat noch keine Lösung; alle Zuordnungen.
   Hier kann die Orga Zuordnungen manuell setzen/lösen.
-- Teilnehmende manuell hinzufügen/entfernen.
+- Teilnehmende manuell hinzufügen (Name + E-Mail; die Person bekommt eine Mail zum Ergänzen) und entfernen.
+- **Warteliste**: Ist die Kapazität erreicht, trägt man sich auf die Warteliste ein. Wird ein Platz frei (Abmeldung,
+  mehr Plätze), rückt die erste Person automatisch nach und bekommt eine Mail; die Orga kann auch direkt aufnehmen.
+- **Rundmail** an alle Angemeldeten (optional auch die Warteliste), Antworten an die Kontaktadresse, höchstens 5 pro
+  Tag.
 
 ### 4.7 Benachrichtigungen (nach MVP)
 
@@ -173,7 +177,9 @@ Per E-Mail, später Web-Push (PWA):
 
 - an Suchende: „Neu: Anna fährt Freitag aus Köln, ca. 3 min Umweg.“
 - an Fahrende: „2 Leute auf deiner Strecke suchen noch eine Mitfahrt.“ – der eigentliche soziale Hebel.
-- Erinnerungen: Anmeldefrist naht; Reise noch „offen“.
+- Erinnerungen: Reise noch „offen“; „Bald geht's los“ 2 Tage vor Beginn (die Leute sind ja schon angemeldet – eine
+  Erinnerung an die Anmeldefrist bringt ihnen nichts).
+- Termin oder Ort geändert → Mail an alle (abwählbar), Reisetage wandern mit; Veranstaltung gelöscht → Absage.
 - Jede Benachrichtigungsart abbestellbar.
 
 Umgesetzt (M6): Anmeldebestätigung mit Kalendereintrag; Mitfahr-Hinweise als Sammelmail (Umweg ≤ 20 min, Zeit passt;
@@ -209,7 +215,9 @@ pro Art im Profil oder per Link ohne Login (Bestätigung per Knopf, damit Mail-S
 - **Design**: neutral, ruhig, zugänglich (Kontrast, Tastaturbedienung). Keine Landingpage mit Marketing.
 - **Datenschutz**: Datensparsam; grobe Ortsangaben nach außen; Kontaktdaten nur für Mitteilnehmende desselben
   Events; Teilnehmende sehen keine vollständige Teilnehmendenliste, nur die Mitfahr-Ansicht; Account samt Daten
-  selbst löschbar; keine externen Tracker.
+  selbst löschbar (allein organisierte Events gehen mit, Angemeldete bekommen eine Absage); keine externen Tracker.
+  Anmeldungen werden ein Jahr nach der Veranstaltung gelöscht, das Event bleibt zum Duplizieren. E-Mail-Adresse
+  änderbar (Bestätigung an die neue Adresse). Impressum und Datenschutzerklärung in vier Sprachen.
 - **Self-Hosting**: ein Docker-Image, SQLite-Datei auf einem Volume, Konfiguration über Umgebungsvariablen (Base-URL,
   SMTP). Einfaches Backup = Datei kopieren.
 

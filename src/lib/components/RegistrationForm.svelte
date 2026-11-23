@@ -38,6 +38,7 @@
 		contactError = false,
 		rideVisibility = 'public',
 		guest = null,
+		waitlist = false,
 		oncancel
 	}: {
 		fields: Field[];
@@ -58,6 +59,8 @@
 		contactError?: boolean;
 		/** Who will see the trip – said right where people enter it */
 		rideVisibility?: RideVisibility;
+		/** the event is full: this puts people on the waiting list */
+		waitlist?: boolean;
 		/** Not logged in: name and e-mail are asked at the very end (docs/konzept.md 5) */
 		guest?: { name: string; email: string; errors: { name?: boolean; email?: boolean } } | null;
 		oncancel?: () => void;
@@ -214,7 +217,11 @@
 
 	<div class="actions">
 		<button class="btn btn-primary" disabled={pending}>
-			{isUpdate ? m.registration_update() : m.registration_submit()}
+			{isUpdate
+				? m.registration_update()
+				: waitlist
+					? m.waitlist_submit()
+					: m.registration_submit()}
 		</button>
 		{#if oncancel}
 			<button type="button" class="btn" onclick={oncancel}>{m.cancel()}</button>

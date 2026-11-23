@@ -30,7 +30,7 @@ export type Mail = {
 	html: string;
 	/** Where answers go – the organizers of the event (the sender itself is a no-reply address) */
 	replyTo?: string;
-	/** one-click-ish unsubscribe target (shown by many mail clients as "Abbestellen") */
+	/** unsubscribe target (shown by many mail clients as "Abbestellen"; one click, RFC 8058) */
 	unsubscribeUrl?: string;
 	attachments?: { filename: string; content: string; contentType: string }[];
 };
@@ -60,7 +60,12 @@ export async function sendMail(mail: Mail) {
 		from: MAIL_FROM ?? SMTP_USER,
 		...rest,
 		attachments,
-		headers: unsubscribeUrl ? { 'List-Unsubscribe': `<${unsubscribeUrl}>` } : undefined
+		headers: unsubscribeUrl
+			? {
+					'List-Unsubscribe': `<${unsubscribeUrl}>`,
+					'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+				}
+			: undefined
 	});
 }
 

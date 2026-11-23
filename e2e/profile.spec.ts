@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginAs, ready } from './helpers';
+import { loginAs, outbox, ready, userByEmail } from './helpers';
 
 test('several ways to be reached can be saved in the profile', async ({ context, page }) => {
 	await loginAs(context, 'Kai');
@@ -44,4 +44,50 @@ test('several ways to be reached can be saved in the profile', async ({ context,
 	// all stay after a reload
 	await page.reload();
 	await expect(section.getByRole('listitem')).toHaveCount(3);
+});
+
+test('changing the e-mail address needs a click on a link sent to the new one', async ({
+	page,
+	context,
+	browser
+}) => {
+	const kim = await loginAs(context, 'Kim');
+	const other = await loginAs(await browser.newContext(), 'Schon Da');
+	const fresh = `kim.neu.${Date.now()}@example.org`;
+
+	await page.goto('/profile');
+	await ready(page);
+	const change = async (email: string) => {
+		await page.getByText('E-Mail-Adresse ändern').click();
+		await page.getByLabel('Neue E-Mail-Adresse').fill(email);
+		await page.getByRole('button', { name: 'Link senden' }).click();
+		await expect(page.getByText(`Schau in das Postfach von ${email}`)).toBeVisible();
+	};
+
+	// an address that already has an account: same answer here, a note (no link) there
+	await change(other.email);
+	await expect
+		.poll(() => outbox(other.email).map((m) => m.subject))
+		.toContain('Neue E-Mail-Adresse für toodle bestätigen');
+	expect(outbox(other.email).at(-1)!.text).not.toContain('/auth/email');
+
+	await page.reload();
+	await ready(page);
+	await change(fresh);
+	await expect.poll(() => outbox(fresh).length).toBe(1);
+	const link = outbox(fresh)[0].text.match(/https?:\/\/\S+\/auth\/email\?token=\S+/)![0];
+	expect(userByEmail(kim.email)).toBeTruthy(); // nothing changed yet
+
+	await page.goto(link);
+	await ready(page);
+	await page.getByRole('button', { name: 'Ja, Adresse ändern' }).click();
+	await expect(page.getByText(`Dein Konto läuft jetzt auf ${fresh}.`)).toBeVisible();
+	expect(userByEmail(fresh)?.id).toBe(kim.userId);
+	await expect
+		.poll(() => outbox(kim.email).map((m) => m.subject))
+		.toContain('Deine E-Mail-Adresse bei toodle wurde geändert');
+
+	// the link works only once
+	await page.goto(link);
+	await expect(page.getByText(/abgelaufen oder wurde schon benutzt/)).toBeVisible();
 });

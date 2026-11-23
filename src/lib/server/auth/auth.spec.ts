@@ -62,4 +62,13 @@ describe('rate limiter', () => {
 		expect(limiter.take('other', 20)).toBe(true);
 		expect(limiter.take('k', 1010)).toBe(true);
 	});
+
+	it('forgets keys once their window is over', () => {
+		const limiter = createRateLimiter(5, 1000);
+		limiter.take('1.2.3.4', 0);
+		limiter.take('5.6.7.8', 500);
+		expect(limiter.size()).toBe(2);
+		limiter.take('9.9.9.9', 1600); // a window later: the first two are gone
+		expect(limiter.size()).toBe(1);
+	});
 });

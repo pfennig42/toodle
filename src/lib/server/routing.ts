@@ -8,6 +8,7 @@
  */
 import { ROUTING_URL } from '$app/env/private';
 import { straightLine, type Participant, type Point, type TravelTime } from './ride-matching.js';
+import { userAgent } from './user-agent.js';
 
 /** OSRM's default --max-table-size is 100. */
 const MAX_POINTS = 100;
@@ -58,7 +59,10 @@ export async function travelTimeFor(
 
 	try {
 		const url = `${baseUrl.replace(/\/+$/, '')}/table/v1/driving/${unique.join(';')}?annotations=duration`;
-		const res = await fetcher(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+		const res = await fetcher(url, {
+			headers: { 'user-agent': userAgent() },
+			signal: AbortSignal.timeout(TIMEOUT_MS)
+		});
 		const matrix = res.ok ? parseTable(unique, await res.json()) : null;
 		if (!matrix) throw new Error(`routing: HTTP ${res.status}`);
 		if (cache.size > 200) cache.clear();

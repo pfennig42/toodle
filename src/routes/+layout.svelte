@@ -115,6 +115,10 @@
 		<p class="muted">
 			<a href={resolve('/about')}>{m.footer_about()}</a>
 			·
+			<a href={resolve('/privacy')}>{m.footer_privacy()}</a>
+			·
+			<a href={resolve('/imprint')}>{m.footer_imprint()}</a>
+			·
 			<a href="https://pfennig.tech" rel="noopener">{m.footer_by()}</a>
 		</p>
 	</footer>

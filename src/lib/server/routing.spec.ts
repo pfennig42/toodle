@@ -79,7 +79,7 @@ describe('routing', () => {
 
 describe('push endpoints', () => {
 	it('only accepts the push services of common browsers', async () => {
-		const { isAllowedEndpoint } = await import('./push.js');
+		const { isAllowedEndpoint } = await import('./push-endpoint.js');
 		expect(isAllowedEndpoint('https://fcm.googleapis.com/fcm/send/abc')).toBe(true);
 		expect(isAllowedEndpoint('https://updates.push.services.mozilla.com/wpush/v2/x')).toBe(true);
 		expect(isAllowedEndpoint('https://web.push.apple.com/QAbc')).toBe(true);

@@ -9,8 +9,12 @@ import {
 	requireOrganizerEvent,
 	updateEventDetails
 } from '#lib/server/events.js';
-import { notifyEventChanged } from '#lib/server/notifications.js';
-import { countActiveRegistrations, shiftTravelDays } from '#lib/server/registrations.js';
+import { notifyEventChanged, notifyPromoted } from '#lib/server/notifications.js';
+import {
+	countActiveRegistrations,
+	promoteWaitlist,
+	shiftTravelDays
+} from '#lib/server/registrations.js';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = ({ params, locals, url }) => {
@@ -43,17 +47,20 @@ export const actions: Actions = {
 		updateEventDetails(e.id, parsed.details);
 
 		// Other days or another place: travel plans move along, and the people registered hear
-		// about it (drafts have nobody to tell).
+		// about it – unless the organizers unticked "notify" (e.g. fixing a typo in the place).
 		const change = detailsChange(e, parsed.details);
 		const hasTravel = listFields(e.id).some((f) => f.type === 'travel');
 		const travelMoved = hasTravel && (change.shiftDays.to !== 0 || change.shiftDays.from !== 0);
 		if (travelMoved) shiftTravelDays(e.id, change.shiftDays, parsed.details.timezone);
 		const notified =
+			form.get('notifyParticipants') === 'on' &&
 			e.status === 'published' &&
 			(change.when || change.where) &&
 			countActiveRegistrations(e.id) > 0;
 		if (notified)
 			void notifyEventChanged(e.id, { when: change.when, where: change.where, travelMoved });
+		// more places (or no limit any more): the waiting list moves up
+		void notifyPromoted(e.id, promoteWaitlist(e.id));
 		return { saved: true, notified };
 	}
 };

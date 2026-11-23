@@ -95,6 +95,36 @@
 				{#if saved('name')}<span class="muted small" role="status">{m.saved()}</span>{/if}
 			</div>
 		</form>
+		<details class="change-email" open={form?.section === 'email'}>
+			<summary class="small">{m.profile_email_change()}</summary>
+			<form method="post" action="?/changeEmail" class="stack" use:enhance={keep}>
+				<label class="field">
+					<span>{m.profile_email_new()}</span>
+					<input
+						name="email"
+						type="email"
+						required
+						autocomplete="email"
+						value={form?.section === 'email' && 'newEmail' in form ? form.newEmail : ''}
+					/>
+					<span class="muted small">{m.profile_email_change_hint()}</span>
+				</label>
+				{#if form?.section === 'email' && 'sentTo' in form}
+					<p role="status">{m.profile_email_change_sent({ email: form.sentTo ?? '' })}</p>
+				{:else if form?.section === 'email' && 'error' in form}
+					<p class="error" role="alert">
+						{form.error === 'rate'
+							? m.event_verify_rate()
+							: form.error === 'mail'
+								? m.event_verify_error()
+								: m.profile_email_change_invalid()}
+					</p>
+				{/if}
+				<div class="actions">
+					<button class="btn">{m.profile_email_change_submit()}</button>
+				</div>
+			</form>
+		</details>
 	</section>
 
 	<section class="card">

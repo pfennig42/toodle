@@ -133,6 +133,18 @@ export function groupNotices(
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/** "It's soon": this long before the start. */
+export const EVENT_SOON_DAYS = 2;
+
+/**
+ * Reminder that the event is coming up – for everybody registered, once. Not for people who
+ * registered within that window: their confirmation just told them everything.
+ */
+export function eventSoonDue(ev: { startsAt: Date }, reg: { createdAt: Date }, now: Date): boolean {
+	const from = ev.startsAt.getTime() - EVENT_SOON_DAYS * DAY;
+	return now.getTime() >= from && now < ev.startsAt && reg.createdAt.getTime() < from;
+}
+
 /**
  * Reminder for open travel plans: 7 days before the start, or 2 days before the registration
  * deadline if that comes earlier. Not for registrations younger than a day.

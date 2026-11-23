@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import Database from 'better-sqlite3';
 import { expect, test } from '@playwright/test';
 import {
 	ageRegistration,
@@ -126,6 +128,22 @@ test('confirmation, ride hints, ride links, reminders and unsubscribing', async 
 	await leaPage.reload();
 	await expect(leaPage.getByRole('checkbox', { name: /Erinnerungen/ })).not.toBeChecked();
 
+	// one click in the mail program (RFC 8058): the provider posts from its own servers
+	const oneClick = /Anmeldebestätigungen abbestellen: (\S+)/.exec(confirm.text)![1];
+	const res = await anon.request.post(oneClick, {
+		headers: { origin: 'https://mail.google.com' },
+		form: { 'List-Unsubscribe': 'One-Click' }
+	});
+	expect(res.status()).toBe(200);
+	await leaPage.reload();
+	await expect(leaPage.getByRole('checkbox', { name: 'Anmeldebestätigungen' })).not.toBeChecked();
+	// …while every other cross-site form post is still refused
+	const forged = await anon.request.post('/profile?/deleteAccount', {
+		headers: { origin: 'https://evil.example' },
+		form: { confirm: lea.email }
+	});
+	expect(forged.status()).toBe(403);
+
 	// a bogus token shows nothing
 	expect((await anon.goto('/unsubscribe/nope?k=rides'))!.status()).toBe(404);
 });
@@ -177,4 +195,48 @@ test('own pages stay readable offline; logging out removes them', async ({
 	await context.setOffline(true);
 	await page.goto(`/e/${slug}`);
 	await expect(page.getByRole('heading', { name: 'Du bist offline' })).toBeVisible();
+});
+
+test('two days before, everybody registered is reminded – with their own ride', async ({
+	browser
+}) => {
+	const olga = await loginAs(await browser.newContext(), 'Olga Orga');
+	const slug = createEvent(olga.userId, {
+		title: 'Herbstfahrt',
+		startsInDays: 1,
+		fields: [{ type: 'travel', label: 'Reise', config: { directions: ['to'] } }]
+	});
+	const anna = await loginAs(await browser.newContext(), 'Anna');
+	const ben = await loginAs(await browser.newContext(), 'Ben');
+	const fresh = await loginAs(await browser.newContext(), 'Frieda');
+	const annaReg = registerDirect(slug, anna.userId, {
+		to: { mode: 'car', area: 'Köln', lat: 50.94, lon: 6.96 }
+	});
+	const benReg = registerDirect(slug, ben.userId, {
+		to: { mode: 'seeking', area: 'Köln', lat: 50.93, lon: 6.95 }
+	});
+	ageRegistration(annaReg, 10);
+	ageRegistration(benReg, 10);
+	// registered just now: the confirmation said it all
+	registerDirect(slug, fresh.userId, { to: { mode: 'undecided' } });
+	const db = new Database('e2e/.tmp/test.db');
+	db.prepare(
+		"insert into ride_link (id, event_id, direction, driver_registration_id, passenger_registration_id, created_at) values (?, ?, 'to', ?, ?, ?)"
+	).run(randomUUID(), eventIdOf(slug), annaReg, benReg, Math.floor(Date.now() / 1000));
+	db.close();
+
+	const subject = 'Bald geht’s los: Herbstfahrt';
+	await expect
+		.poll(() => outbox(anna.email).map((m) => m.subject), { timeout: 10_000 })
+		.toContain(subject);
+	await expect.poll(() => outbox(ben.email).map((m) => m.subject)).toContain(subject);
+	const annaMail = outbox(anna.email).find((m) => m.subject === subject)!.text;
+	expect(annaMail).toContain('Anreise: Bei dir fahren mit: Ben');
+	// "soon" plus the date – no "in two days", which would be wrong if the job ran late
+	expect(annaMail).toContain('bald ist es so weit – „Herbstfahrt“:');
+	expect(annaMail).not.toContain('zwei Tagen');
+	expect(outbox(ben.email).find((m) => m.subject === subject)!.text).toContain(
+		'Anreise: Du fährst bei Anna mit'
+	);
+	expect(outbox(fresh.email).map((m) => m.subject)).not.toContain(subject);
 });

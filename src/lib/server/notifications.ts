@@ -3,7 +3,7 @@
  * set by someone else and reminders for open travel plans. Every kind can be switched off.
  */
 import { randomBytes } from 'node:crypto';
-import { and, eq, gt, inArray, isNotNull, max } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, isNull, max } from 'drizzle-orm';
 import { NOTIFY_INTERVAL, ORIGIN } from '$app/env/private';
 import { m } from '../paraglide/messages.js';
 import { formatRange } from '../datetime.js';
@@ -25,6 +25,7 @@ import { withLocale } from './locale-context.js';
 import { renderMail, trySendMail, type Mail } from './mail.js';
 import { sendPush, type PushMessage } from './push.js';
 import {
+	eventSoonDue,
 	groupNotices,
 	matchRef,
 	openDirections,
@@ -54,11 +55,23 @@ function getUser(id: string): Recipient | null {
 
 const displayName = (u: { name: string | null; email: string }) => u.name ?? u.email.split('@')[0];
 
+/**
+ * The user's unsubscribe token – created once, then never changed: links in older mails must keep
+ * working. `u` may be an old snapshot, so the database decides.
+ */
 function unsubscribeToken(u: Recipient): string {
 	if (u.unsubscribeToken) return u.unsubscribeToken;
-	const token = randomBytes(24).toString('base64url');
-	db.update(user).set({ unsubscribeToken: token }).where(eq(user.id, u.id)).run();
-	return token;
+	db.update(user)
+		.set({ unsubscribeToken: randomBytes(24).toString('base64url') })
+		.where(and(eq(user.id, u.id), isNull(user.unsubscribeToken)))
+		.run();
+	const { token } = db
+		.select({ token: user.unsubscribeToken })
+		.from(user)
+		.where(eq(user.id, u.id))
+		.get()!;
+	u.unsubscribeToken = token;
+	return token!;
 }
 
 const unsubscribeUrl = (u: Recipient, kind: PrefKind) =>
@@ -184,15 +197,165 @@ function icsAttachment(e: Event) {
 	};
 }
 
-/** Everybody actively registered for an event. */
-function registeredUsers(eventId: string): Recipient[] {
+/** Everybody registered for an event – and, if asked, those on the waiting list. */
+function registeredUsers(eventId: string, { waitlist = false } = {}): Recipient[] {
 	return db
 		.select({ user })
 		.from(registration)
 		.innerJoin(user, eq(user.id, registration.userId))
-		.where(and(eq(registration.eventId, eventId), eq(registration.status, 'active')))
+		.where(
+			and(
+				eq(registration.eventId, eventId),
+				waitlist
+					? inArray(registration.status, ['active', 'waitlisted'])
+					: eq(registration.status, 'active')
+			)
+		)
 		.all()
 		.map((r) => r.user);
+}
+
+/* --------------------------------------------------------------- broadcast */
+
+export const BROADCAST_SUBJECT_MAX = 120;
+export const BROADCAST_TEXT_MAX = 5000;
+
+/**
+ * A message from the organizers to everybody registered (and, if wanted, the waiting list).
+ * Plain text, sent as the event, answers go to the organizers. The sender gets a copy.
+ * Returns how many people it is sent to; the sending itself runs in the background.
+ */
+export function sendBroadcast(
+	eventId: string,
+	actorUserId: string,
+	msg: { subject: string; text: string; waitlist: boolean }
+): number {
+	const e = db.select().from(event).where(eq(event.id, eventId)).get();
+	const actor = getUser(actorUserId);
+	if (!e || !actor) return 0;
+	const recipients = registeredUsers(e.id, { waitlist: msg.waitlist });
+	const paragraphs = msg.text
+		.split(/\n\s*\n/)
+		.map((p) => p.trim())
+		.filter(Boolean);
+	const build = (u: Recipient, copy: boolean) =>
+		withLocale(u.locale, () => {
+			const reply = orgaReply(e, m.mail_broadcast_footer({ title: e.title }));
+			return {
+				to: u.email,
+				replyTo: reply.replyTo,
+				subject: `${copy ? `${m.mail_broadcast_copy()} ` : ''}${e.title}: ${msg.subject}`,
+				...renderMail({
+					paragraphs: [
+						...(copy ? [m.mail_broadcast_copy_text({ count: recipients.length })] : []),
+						m.mail_hello({ name: displayName(u) }),
+						...paragraphs,
+						m.mail_broadcast_from({ name: displayName(actor) })
+					],
+					action: { label: m.mail_button_event(), url: eventUrl(e) },
+					footer: reply.footer
+				})
+			} satisfies Mail;
+		});
+	const mails = [
+		...recipients.map((u) => build(u, false)),
+		...(recipients.some((u) => u.id === actor.id) ? [] : [build(actor, true)])
+	];
+	void sendAll(mails);
+	return recipients.length;
+}
+
+/* ------------------------------------------------------------ waiting list */
+
+/** "You're on the waiting list (place n)" – instead of the confirmation. Never throws. */
+export async function sendWaitlistConfirmation(eventId: string, userId: string, position: number) {
+	try {
+		const e = db.select().from(event).where(eq(event.id, eventId)).get();
+		const u = getUser(userId);
+		if (!e || !u) return;
+		const mail = withLocale(u.locale, () => {
+			const locale = u.locale ?? 'de';
+			const reply = orgaReply(e, m.mail_waitlist_footer());
+			return {
+				to: u.email,
+				replyTo: reply.replyTo,
+				subject: m.mail_waitlist_subject({ title: e.title }),
+				...renderMail({
+					paragraphs: [
+						m.mail_hello({ name: displayName(u) }),
+						m.mail_waitlist_intro({ title: e.title, position }),
+						[formatRange(e.startsAt, e.endsAt, e.timezone, locale, e), whereText(e)]
+							.filter(Boolean)
+							.join(' · '),
+						m.mail_waitlist_how()
+					],
+					action: { label: m.mail_button_event(), url: eventUrl(e) },
+					footer: reply.footer
+				})
+			} satisfies Mail;
+		});
+		await trySendMail(mail);
+	} catch (err) {
+		console.error('[notify] waitlist confirmation failed', err);
+	}
+}
+
+/**
+ * A place became free and these people moved up from the waiting list. They hear it right away
+ * (whatever their settings – they asked for exactly this), with the calendar entry. Never throws.
+ */
+export async function notifyPromoted(eventId: string, userIds: string[]) {
+	if (!userIds.length) return;
+	try {
+		const e = db.select().from(event).where(eq(event.id, eventId)).get();
+		if (!e) return;
+		const hasTravel = travelDirections(e.id).length > 0;
+		for (const id of userIds) {
+			const u = getUser(id);
+			if (!u) continue;
+			const { mail, push } = withLocale(u.locale, () => {
+				const locale = u.locale ?? 'de';
+				const subject = m.mail_promoted_subject({ title: e.title });
+				const reply = orgaReply(e, m.mail_promoted_footer());
+				const mail: Mail = {
+					to: u.email,
+					replyTo: reply.replyTo,
+					subject,
+					...renderMail({
+						paragraphs: [
+							m.mail_hello({ name: displayName(u) }),
+							m.mail_promoted_intro({ title: e.title }),
+							[formatRange(e.startsAt, e.endsAt, e.timezone, locale, e), whereText(e)]
+								.filter(Boolean)
+								.join(' · '),
+							m.mail_promoted_hint()
+						],
+						action: hasTravel
+							? { label: m.mail_button_rides(), url: ridesUrl(e) }
+							: { label: m.mail_button_event(), url: eventUrl(e) },
+						footer: reply.footer
+					}),
+					attachments: [icsAttachment(e)]
+				};
+				const push: PushMessage = {
+					title: subject,
+					body: m.mail_promoted_intro({ title: e.title }),
+					url: path(eventUrl(e)),
+					tag: `promoted-${e.id}`
+				};
+				return { mail, push };
+			});
+			// both: this one matters
+			try {
+				await sendPush(u.id, push);
+			} catch (err) {
+				console.error('[notify] push failed', err);
+			}
+			await trySendMail(mail);
+		}
+	} catch (err) {
+		console.error('[notify] promotion failed', err);
+	}
 }
 
 /** Only upcoming, published events concern anybody. */
@@ -215,7 +378,7 @@ export async function notifyEventChanged(
 	try {
 		const e = db.select().from(event).where(eq(event.id, eventId)).get();
 		if (!e || !concernsParticipants(e) || (!change.when && !change.where)) return;
-		for (const u of registeredUsers(e.id)) {
+		for (const u of registeredUsers(e.id, { waitlist: true })) {
 			const mail = withLocale(u.locale, () => {
 				const locale = u.locale ?? 'de';
 				const reply = orgaReply(e, m.mail_changed_footer());
@@ -261,7 +424,7 @@ export async function notifyEventChanged(
 export function cancellationMails(eventId: string): Mail[] {
 	const e = db.select().from(event).where(eq(event.id, eventId)).get();
 	if (!e || !concernsParticipants(e)) return [];
-	return registeredUsers(e.id).map((u) =>
+	return registeredUsers(e.id, { waitlist: true }).map((u) =>
 		withLocale(u.locale, () => {
 			const locale = u.locale ?? 'de';
 			const reply = orgaReply(e, m.mail_cancelled_footer());
@@ -375,6 +538,45 @@ export async function sendConfirmation(
 		await trySendMail(mail);
 	} catch (err) {
 		console.error('[notify] confirmation failed', err);
+	}
+}
+
+/**
+ * The organizers registered somebody themselves: tell that person, with the way to add their
+ * own details (travel, answers) – or to withdraw. Sent whatever the mail settings: it's the only
+ * way the person learns about it. Never throws.
+ */
+export async function notifyAddedByOrganizer(eventId: string, userId: string, actorUserId: string) {
+	try {
+		const e = db.select().from(event).where(eq(event.id, eventId)).get();
+		const u = getUser(userId);
+		const actor = getUser(actorUserId);
+		if (!e || !u || !actor) return;
+		const mail = withLocale(u.locale, () => {
+			const locale = u.locale ?? 'de';
+			const reply = orgaReply(e, m.mail_added_footer());
+			return {
+				to: u.email,
+				replyTo: reply.replyTo,
+				subject: m.mail_confirm_subject({ title: e.title }),
+				...renderMail({
+					paragraphs: [
+						m.mail_hello({ name: displayName(u) }),
+						m.mail_added_intro({ actor: displayName(actor), title: e.title }),
+						[formatRange(e.startsAt, e.endsAt, e.timezone, locale, e), whereText(e)]
+							.filter(Boolean)
+							.join(' · '),
+						m.mail_added_complete()
+					],
+					action: { label: m.mail_added_button(), url: eventUrl(e) },
+					footer: reply.footer
+				}),
+				attachments: [icsAttachment(e)]
+			} satisfies Mail;
+		});
+		await trySendMail(mail);
+	} catch (err) {
+		console.error('[notify] added by organizer failed', err);
 	}
 }
 
@@ -610,6 +812,100 @@ async function travelReminders(e: Event, now: Date) {
 	return sent;
 }
 
+/**
+ * "Soon it starts": two days before, everybody registered gets date, place and their own way
+ * there – who they ride with, who rides with them, or that they are still looking.
+ */
+async function eventSoonReminders(e: Event, now: Date) {
+	const regs = db
+		.select({ reg: registration, user })
+		.from(registration)
+		.innerJoin(user, eq(user.id, registration.userId))
+		.where(and(eq(registration.eventId, e.id), eq(registration.status, 'active')))
+		.all()
+		.filter(({ reg }) => eventSoonDue(e, reg, now));
+	if (!regs.length) return 0;
+	const dirs = travelDirections(e.id);
+	const { participants, links } = dirs.length
+		? loadRideData(e.id)
+		: { participants: [], links: [] };
+	const nameOf = new Map(participants.map((p) => [p.registrationId, p.name]));
+
+	let sent = 0;
+	for (const { reg, user: u } of regs) {
+		if (!record(u.id, e.id, 'event_soon', reg.id, u.notifyReminders)) continue;
+		if (!u.notifyReminders) continue;
+		const me = participants.find((p) => p.registrationId === reg.id);
+		const { mail, push } = withLocale(u.locale, () => {
+			const locale = u.locale ?? 'de';
+			const when = formatRange(e.startsAt, e.endsAt, e.timezone, locale, e);
+			const travel = dirs.flatMap((d) => {
+				const leg = me?.legs[d];
+				const dirLinks = links.filter((l) => l.direction === d);
+				const driver = dirLinks.find((l) => l.passengerRegistrationId === reg.id);
+				const passengers = dirLinks
+					.filter((l) => l.driverRegistrationId === reg.id)
+					.map((l) => nameOf.get(l.passengerRegistrationId) ?? '?');
+				const label = dirLabel(d);
+				if (driver)
+					return [
+						m.mail_soon_rides_with({
+							direction: label,
+							name: nameOf.get(driver.driverRegistrationId) ?? '?'
+						})
+					];
+				if (passengers.length)
+					return [m.mail_soon_takes({ direction: label, names: passengers.join(', ') })];
+				if (leg && (leg.mode === 'seeking' || leg.mode === 'flexible' || leg.mode === 'transit'))
+					return [m.mail_soon_still_seeking({ direction: label })];
+				if (leg && leg.mode !== 'undecided')
+					return [
+						[
+							`${label}: ${modeLabel(leg.mode)}`,
+							leg.time ? shortTime(leg.time, e.timezone, locale, leg.hasClock) : null
+						]
+							.filter(Boolean)
+							.join(' · ')
+					];
+				return [];
+			});
+			const subject = m.mail_soon_subject({ title: e.title });
+			const reply = orgaReply(e, m.mail_soon_footer());
+			const mail: Mail = {
+				to: u.email,
+				replyTo: reply.replyTo,
+				subject,
+				...renderMail({
+					paragraphs: [
+						m.mail_hello({ name: displayName(u) }),
+						m.mail_soon_text({ title: e.title }),
+						[when, whereText(e)].filter(Boolean).join(' · ')
+					],
+					items: travel,
+					action: dirs.length
+						? { label: m.mail_button_rides(), url: ridesUrl(e) }
+						: { label: m.mail_button_event(), url: eventUrl(e) },
+					footer: reply.footer,
+					unsubscribe: {
+						label: m.mail_unsubscribe_reminders(),
+						url: unsubscribeUrl(u, 'reminders')
+					}
+				}),
+				unsubscribeUrl: unsubscribeUrl(u, 'reminders')
+			};
+			const push: PushMessage = {
+				title: subject,
+				body: [when, ...travel].join('\n'),
+				url: path(dirs.length ? ridesUrl(e) : eventUrl(e)),
+				tag: `soon-${e.id}`
+			};
+			return { mail, push };
+		});
+		if (await deliver(u, mail, push)) sent++;
+	}
+	return sent;
+}
+
 /** One pass over all upcoming published events. */
 export async function runNotificationJob(now = new Date()) {
 	const events = db
@@ -622,6 +918,7 @@ export async function runNotificationJob(now = new Date()) {
 		try {
 			sent += await rideMatchMails(e, now);
 			sent += await travelReminders(e, now);
+			sent += await eventSoonReminders(e, now);
 		} catch (err) {
 			console.error(`[notify] job failed for event ${e.id}`, err);
 		}

@@ -84,26 +84,29 @@ test('moving an event tells the participants and moves their travel days; deleti
 
 	// one week later – submitted like the form does
 	const week = 7 * 86400;
-	const res = await context.request.post(`/events/${id}/details`, {
-		headers: { origin: BASE },
-		form: {
-			title: 'Wanderlager',
-			description: '',
-			locationName: 'Jugendhof Waldheim',
-			address: 'Am Wald 3, 57000 Waldheim',
-			area: 'Waldheim',
-			lat: '50.9',
-			lon: '8.1',
-			startDate: berlinDay(ev.starts_at + week),
-			startTime: '',
-			endDate: berlinDay(ev.ends_at + week),
-			endTime: '',
-			timezone: 'Europe/Berlin',
-			contactEmail: 'orga@example.org',
-			rideVisibility: 'public',
-			capacity: ''
-		}
-	});
+	const saveDetails = (days: number, notify: boolean) =>
+		context.request.post(`/events/${id}/details`, {
+			headers: { origin: BASE },
+			form: {
+				title: 'Wanderlager',
+				description: '',
+				locationName: 'Jugendhof Waldheim',
+				address: 'Am Wald 3, 57000 Waldheim',
+				area: 'Waldheim',
+				lat: '50.9',
+				lon: '8.1',
+				startDate: berlinDay(ev.starts_at + days * 86400),
+				startTime: '',
+				endDate: berlinDay(ev.ends_at + days * 86400),
+				endTime: '',
+				timezone: 'Europe/Berlin',
+				contactEmail: 'orga@example.org',
+				rideVisibility: 'public',
+				capacity: '',
+				...(notify && { notifyParticipants: 'on' })
+			}
+		});
+	const res = await saveDetails(7, true);
 	expect(res.status()).toBe(200);
 
 	await expect
@@ -118,6 +121,18 @@ test('moving an event tells the participants and moves their travel days; deleti
 		regId
 	);
 	expect(leg.time).toBe(tenOclock + week);
+
+	// unticked: travel days still move along, but nobody gets a mail
+	const before = outbox(pia.email).length;
+	expect((await saveDetails(8, false)).status()).toBe(200);
+	expect(
+		sql<{ time: number }>(
+			"select time from travel_leg where registration_id = ? and direction = 'to'",
+			regId
+		).time
+	).toBe(tenOclock + 8 * 86400);
+	await page.waitForTimeout(500);
+	expect(outbox(pia.email).length).toBe(before);
 
 	// deleting: Pia gets a cancellation
 	await page.goto(`/events/${id}/settings`);

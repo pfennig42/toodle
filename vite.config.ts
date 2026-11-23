@@ -12,6 +12,9 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 			adapter: adapter(),
+			// The origin check for form posts is done in hooks.server.ts (handleCsrf) instead: same
+			// rule, but the one-click unsubscribe (RFC 8058) must accept posts from mail providers.
+			csrf: { trustedOrigins: ['*'] },
 			// Everything comes from this origin: map tiles and the address search are proxied
 			// (/api/tiles, /api/geocode), external URLs are plain links. SvelteKit adds nonces for
 			// its inline scripts. Inline styles stay allowed (style attributes from Svelte and

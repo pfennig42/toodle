@@ -51,6 +51,11 @@ export const variables = defineEnvVars({
 		description: 'Testing only: write push messages to this file instead of sending them.',
 		schema: optional
 	},
+	BACKUP_DIR: {
+		description:
+			'Optional directory for automatic database backups (hourly if changed, thinned out over time, max. 6 months).',
+		schema: optional
+	},
 	ROUTING_URL: {
 		description:
 			'Optional OSRM server for real driving times, e.g. http://osrm:5000 (default: straight-line estimate).',
